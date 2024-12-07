@@ -1,0 +1,6 @@
+venv/
+data/
+.idea/
+runs/
+source/__pycache__
+best_model.pth
