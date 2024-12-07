@@ -58,6 +58,38 @@ This project implements an English-to-Spanish translator using the Transformer a
     BLEU Score: 0.47
     Validation Loss: 2.09 after 10 epochs
     Dataset Size: 1.9M rows (1.5M training, 0.4M testing)
+
+## Testing English-to-Spanish Translation:
+    --------------------------------------------------
+    Test 1:
+    English Sentence: How are you?
+    Expected Translation: ¿Cómo estás?
+    Observed Translation: como es usted?
+    --------------------------------------------------
+    Test 2:
+    English Sentence: What is your name?
+    Expected Translation: ¿Cuál es tu nombre?
+    Observed Translation: que nombre tiene?
+    --------------------------------------------------
+    Test 3:
+    English Sentence: Where is the nearest hospital?
+    Expected Translation: ¿Dónde está el hospital más cercano?
+    Observed Translation: donde esta el hospital mas cercano?
+    --------------------------------------------------
+    Test 4:
+    English Sentence: I need help with my homework.
+    Expected Translation: Necesito ayuda con mi tarea.
+    Observed Translation: necesito ayudar con mis deberes.
+    --------------------------------------------------
+    Test 5:
+    English Sentence: Can you tell me the time?
+    Expected Translation: ¿Puedes decirme la hora?
+    Observed Translation: puede decirme el momento?
+
+## Insights
+    Translation Errors: Some translations have correct meaning but use awkward phrasing (e.g., "How are you?" as "¿Cómo está usted?" instead of "¿Cómo estás?").
+    Limited Dataset: The dataset lacks enough examples of idioms and specialized language, reducing accuracy in unique cases.
+    Slow Validation Improvement: Validation loss stopped improving significantly after 8 epochs, showing potential overfitting.
     
 ## License
 This project is licensed under the MIT License.
