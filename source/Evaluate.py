@@ -1,169 +1,169 @@
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from source.Config import Config
-import matplotlib.pyplot as plt
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
+from transformers import BertTokenizer
+from source.Config import Config
 from source.Model import Transformer
 from source.DatasetTranslation import TranslationDataset
 from tqdm import tqdm
-from transformers import BertTokenizer
+import matplotlib.pyplot as plt
 
-def evaluate_model(transformer, test_dataloader, config, max_seq_length=40):
-    """
-    Evaluates the Transformer model using BLEU scores.
-    Adds a progress bar using tqdm and returns BLEU scores for plotting.
-    """
-    device = config.device
-    transformer.to(device)
-    transformer.eval()
-
-    bleu_scores = []
-
-    with torch.no_grad():
-        # Wrap the dataloader with tqdm for a progress bar
-        for batch in tqdm(test_dataloader, desc="Evaluating", unit="batch"):
-            encoder_inputs, decoder_inputs, targets = [x.to(device) for x in batch]
-
-            # Generate translations using greedy decoding
-            predicted_tokens = generate_translations(transformer, encoder_inputs, config, max_seq_length)
-
-            # Convert predicted tokens and targets back to sentences
-            predicted_sentences = decode_sentences(predicted_tokens, config.spanish_index)
-            reference_sentences = decode_sentences(targets.cpu().numpy(), config.spanish_index)
-
-            # Compute BLEU score for each sentence in the batch
-            for pred, ref in zip(predicted_sentences, reference_sentences):
-                if len(ref) == 0:
-                    bleu = 0
-                else:
-                    bleu = sentence_bleu(
-                        [ref.split()],
-                        pred.split(),
-                        smoothing_function=SmoothingFunction().method1
-                    )
-                bleu_scores.append(bleu)
-
-    average_bleu = sum(bleu_scores) / len(bleu_scores) if bleu_scores else 0
-    print(f"Average BLEU Score: {average_bleu:.4f}")
-
-    # Plot BLEU score distribution
-    plt.figure(figsize=(10, 6))
-    plt.hist(bleu_scores, bins=50, color='skyblue', edgecolor='black')
-    plt.title('Distribution of BLEU Scores Across Test Set')
-    plt.xlabel('BLEU Score')
-    plt.ylabel('Frequency')
-    plt.grid(True)
-    plt.savefig('bleu_score_distribution.png')  # Save the plot as an image
-    plt.close() 
-
-    return average_bleu
+try:
+    import sacrebleu as _sacrebleu
+    HAS_SACREBLEU = True
+except ImportError:
+    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+    HAS_SACREBLEU = False
+    print("Warning: sacrebleu not installed — falling back to nltk corpus_bleu.")
 
 
 def generate_translations(transformer, encoder_inputs, config, max_seq_length=40):
     """
-    Generate translations using greedy decoding.
+    Batch greedy/beam generation for evaluation.
+    Returns list of decoded token ID lists, one per sentence in the batch.
     """
     device = encoder_inputs.device
     batch_size = encoder_inputs.size(0)
-    decoded_tokens = torch.full((batch_size, max_seq_length), config.pad_token_id, dtype=torch.long).to(device)
-
-    # Start with <SOS> token
+    decoded_tokens = torch.full(
+        (batch_size, max_seq_length), config.pad_token_id, dtype=torch.long
+    ).to(device)
     decoded_tokens[:, 0] = config.sos_token_id
 
-    for t in range(1, max_seq_length):
-        # Prepare decoder inputs up to current time step
-        current_decoder_input = decoded_tokens[:, :t]
-
-        # Get model outputs
-        outputs = transformer(encoder_inputs, current_decoder_input)
-        next_token_logits = outputs[:, -1, :]  # Get logits for the last time step
-
-        # Greedy decoding: select the token with highest probability
-        next_tokens = torch.argmax(next_token_logits, dim=-1)
-
-        decoded_tokens[:, t] = next_tokens
-
-        # Check if all sequences have generated <END> token
-        if torch.all(next_tokens == config.eos_token_id):
-            break
+    with torch.no_grad():
+        for t in range(1, max_seq_length):
+            outputs = transformer(encoder_inputs, decoded_tokens[:, :t])
+            next_tokens = torch.argmax(outputs[:, -1, :], dim=-1)
+            decoded_tokens[:, t] = next_tokens
+            if torch.all(next_tokens == config.eos_token_id):
+                break
 
     return decoded_tokens.cpu().numpy()
 
 
-def decode_sentences(token_indices, vocab):
+def decode_sentences(token_indices, tokenizer, special_token_ids):
     """
-    Convert token indices back to sentences.
+    FIX Bug #2: use tokenizer.decode() instead of vocab inversion.
+    Eliminates WordPiece ##subword fragments from hypothesis text.
+    special_token_ids: set of IDs to strip before decoding.
     """
-    index_to_vocab = {idx: word for word, idx in vocab.items()}
     sentences = []
-
     for tokens in token_indices:
-        words = []
-        for token in tokens:
-            if token == vocab.get("<END>", 0):
-                break  # Stop at <END> token
-            if token not in [vocab.get("<PAD>", 0), vocab.get("<SOS>", 0), vocab.get("<END>", 0)]:
-                word = index_to_vocab.get(token, "<UNK>")
-                words.append(word)
-        sentence = " ".join(words)
+        filtered = [int(t) for t in tokens if int(t) not in special_token_ids]
+        sentence = tokenizer.decode(filtered, skip_special_tokens=True)
         sentences.append(sentence)
-
     return sentences
+
+
+def evaluate_model(transformer, test_dataloader, config, tokenizer, max_seq_length=40):
+    """
+    Improvement #7: use sacrebleu corpus_bleu (proper corpus-level BLEU).
+    Falls back to nltk corpus_bleu if sacrebleu is unavailable.
+    """
+    transformer.to(config.device)
+    transformer.eval()
+
+    special_ids = {config.pad_token_id, config.sos_token_id, config.eos_token_id}
+    all_hypotheses = []
+    all_references = []
+
+    with torch.no_grad():
+        for batch in tqdm(test_dataloader, desc="Evaluating", unit="batch"):
+            encoder_inputs, _, targets = [x.to(config.device) for x in batch]
+            predicted_tokens = generate_translations(
+                transformer, encoder_inputs, config, max_seq_length
+            )
+            hyps = decode_sentences(predicted_tokens, tokenizer, special_ids)
+            refs = decode_sentences(targets.cpu().numpy(), tokenizer, special_ids)
+            all_hypotheses.extend(hyps)
+            all_references.extend(refs)
+
+    if HAS_SACREBLEU:
+        result = _sacrebleu.corpus_bleu(all_hypotheses, [all_references])
+        average_bleu = result.score / 100.0  # sacrebleu returns 0-100
+        print(f"Average BLEU Score (sacrebleu): {result.score:.2f}")
+    else:
+        tokenised_hyps = [h.split() for h in all_hypotheses]
+        tokenised_refs = [[r.split()] for r in all_references]
+        average_bleu = corpus_bleu(
+            tokenised_refs, tokenised_hyps,
+            smoothing_function=SmoothingFunction().method1
+        )
+        print(f"Average BLEU Score (nltk corpus_bleu): {average_bleu:.4f}")
+
+    # Individual sentence BLEUs for histogram
+    if HAS_SACREBLEU:
+        indiv = [
+            _sacrebleu.sentence_bleu(h, [r]).score / 100.0
+            for h, r in zip(all_hypotheses, all_references)
+        ]
+    else:
+        from nltk.translate.bleu_score import sentence_bleu
+        indiv = [
+            sentence_bleu([r.split()], h.split(),
+                          smoothing_function=SmoothingFunction().method1)
+            for h, r in zip(all_hypotheses, all_references)
+        ]
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(indiv, bins=50, color="skyblue", edgecolor="black")
+    plt.title("Distribution of BLEU Scores Across Test Set")
+    plt.xlabel("BLEU Score")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.savefig("bleu_score_distribution.png")
+    plt.close()
+
+    return average_bleu
 
 
 def load_model(config, model_path="best_model.pth"):
     """
-    Load the trained model from a checkpoint.
+    Improvement #11: load rich checkpoint (supports both new dict format and
+    legacy bare state_dict for backward compatibility).
     """
-    # Initialize the model with config
     transformer = Transformer(config)
-
-    # Load the saved state_dict
     print(f"Loading model from '{model_path}'...")
-    transformer.load_state_dict(torch.load(model_path, map_location=config.device))
+    checkpoint = torch.load(model_path, map_location=config.device)
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        transformer.load_state_dict(checkpoint["model_state_dict"])
+        print(f"  Saved at epoch {checkpoint.get('epoch', '?')} "
+              f"— val_loss={checkpoint.get('val_loss', '?'):.4f}")
+    else:
+        transformer.load_state_dict(checkpoint)  # legacy bare state_dict
     transformer.to(config.device)
-    transformer.eval()  # Set the model to evaluation mode
+    transformer.eval()
     return transformer
 
 
 def evaluate():
-
-    # Initialize configuration
     config = Config()
 
-    # Initialize tokenizer (must match the one used during training)
-    print("Initializing tokenizer...")
-    tokenizer = BertTokenizer.from_pretrained(config.tokenizer_path)  # Path where tokenizer was saved
+    print("Initialising tokenizer...")
+    tokenizer = BertTokenizer.from_pretrained(config.tokenizer_path)
 
-    # Assign token IDs to the Config object
     config.pad_token_id = tokenizer.convert_tokens_to_ids(config.pad_token)
     config.unk_token_id = tokenizer.convert_tokens_to_ids(config.unk_token)
     config.sos_token_id = tokenizer.convert_tokens_to_ids(config.sos_token)
-    config.eos_token_id = tokenizer.convert_tokens_to_ids(config.eos_token)
+    config.eos_token_id  = tokenizer.convert_tokens_to_ids(config.eos_token)
+    config.vocab_size    = len(tokenizer)
 
-    # Update vocab_size based on tokenizer
-    config.vocab_size = len(tokenizer)
-
-    # Assign vocabularies
-    config.english_index = tokenizer.get_vocab()  # Assuming single tokenizer for both languages
-    config.spanish_index = tokenizer.get_vocab()  # Modify if separate tokenizers are used
-
-    # Initialize Test Dataset correctly
-    test_csv = "./data/test.csv"
+    # FIX Bug #3: closing ) was missing on TranslationDataset call
     test_dataset = TranslationDataset(
-        csv_file=test_csv,
+        csv_file=config.test_csv,
         tokenizer=tokenizer,
         sequence_length=config.max_seq_length,
-        config=config
+        config=config,
     )
 
-    # Prepare Test Dataloader
-    test_dataloader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=config.batch_size, shuffle=False,
+        num_workers=4, pin_memory=True,
+    )
 
-    # Load Trained Model
     model = load_model(config, model_path=config.model_save_path)
 
-    # Evaluate Model
     print("Evaluating model on test set...")
-    average_bleu = evaluate_model(model, test_dataloader, config, max_seq_length=config.max_seq_length)
-    print(f"Average BLEU Score: {average_bleu:.4f}")
+    avg_bleu = evaluate_model(
+        model, test_dataloader, config, tokenizer,
+        max_seq_length=config.max_seq_length,
+    )
+    print(f"Final Average BLEU: {avg_bleu:.4f}")
