@@ -18,6 +18,7 @@ class Config:
         self.patience = 3
         self.warmup_steps = 4000       # FIX #improvement: LR warmup steps
         self.seed = 42
+        self.bleu_eval_batches = 10
 
         # Special tokens
         self.pad_token = "<PAD>"
@@ -30,6 +31,10 @@ class Config:
         self.test_csv = "./data/test.csv"
         self.tokenizer_path = "./data/tokenizer/"
         self.model_save_path = "best_model.pth"
+        self.wandb_project = "english-spanish-translator"
+        self.wandb_entity = None
+        self.wandb_mode = "online"
+        self.wandb_anonymous = "allow"
 
         # Device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
