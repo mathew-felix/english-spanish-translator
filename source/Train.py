@@ -1,5 +1,6 @@
 import os
 import torch
+import wandb
 from torch import nn
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,8 +8,16 @@ from torch.utils.data import DataLoader
 from transformers import BertTokenizer
 from source.Model import Transformer
 from source.DatasetTranslation import TranslationDataset
+from source.Evaluate import decode_sentences, generate_translations
 from tqdm import tqdm
 from source.Config import Config
+
+try:
+    import sacrebleu as _sacrebleu
+    HAS_SACREBLEU = True
+except ImportError:
+    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+    HAS_SACREBLEU = False
 
 
 def plot_losses(train_losses, val_losses, epoch, save_path="loss_plot.png"):
@@ -50,12 +59,103 @@ def _show_translations(transformer, tokenizer, config):
     transformer.train()
 
 
+def _serialise_config(config):
+    """Convert config attributes to W&B-safe scalar values."""
+    serialised = {}
+    for key, value in vars(config).items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            serialised[key] = value
+        else:
+            serialised[key] = str(value)
+    return serialised
+
+
+def _init_wandb_run(config):
+    """Initialise a W&B run for training metrics.
+    Falls back to offline mode when online auth is unavailable on this machine.
+    """
+    mode = os.getenv("WANDB_MODE", config.wandb_mode)
+    init_kwargs = {
+        "project": os.getenv("WANDB_PROJECT", config.wandb_project),
+        "entity": os.getenv("WANDB_ENTITY", config.wandb_entity),
+        "mode": mode,
+        "anonymous": os.getenv("WANDB_ANONYMOUS", config.wandb_anonymous),
+        "config": _serialise_config(config),
+        "tags": ["transformer", "translation", "english-spanish"],
+    }
+
+    try:
+        run = wandb.init(**init_kwargs)
+        if run.url:
+            print(f"W&B run URL: {run.url}")
+        return run
+    except (
+        wandb.errors.AuthenticationError,
+        wandb.errors.CommError,
+        wandb.errors.UsageError,
+    ) as exc:
+        if mode != "online":
+            raise
+
+        print(f"W&B online init failed: {exc}")
+        print("Falling back to offline mode for local metric logging.")
+        offline_kwargs = dict(init_kwargs)
+        offline_kwargs["mode"] = "offline"
+        offline_kwargs["anonymous"] = None
+        run = wandb.init(**offline_kwargs)
+        print(f"W&B offline run directory: {run.dir}")
+        return run
+
+
+def _compute_bleu_score(transformer, dataloader, config, tokenizer):
+    """Compute a corpus BLEU score on a bounded validation subset for epoch logging."""
+    special_ids = {config.pad_token_id, config.sos_token_id, config.eos_token_id}
+    all_hypotheses = []
+    all_references = []
+
+    transformer.eval()
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(dataloader):
+            if batch_idx >= config.bleu_eval_batches:
+                break
+
+            encoder_inputs, _, targets = [x.to(config.device) for x in batch]
+            predicted_tokens = generate_translations(
+                transformer,
+                encoder_inputs,
+                config,
+                max_seq_length=config.max_seq_length,
+            )
+            all_hypotheses.extend(
+                decode_sentences(predicted_tokens, tokenizer, special_ids)
+            )
+            all_references.extend(
+                decode_sentences(targets.cpu().numpy(), tokenizer, special_ids)
+            )
+
+    if not all_hypotheses:
+        return 0.0
+
+    if HAS_SACREBLEU:
+        result = _sacrebleu.corpus_bleu(all_hypotheses, [all_references])
+        return result.score / 100.0
+
+    tokenised_hyps = [hyp.split() for hyp in all_hypotheses]
+    tokenised_refs = [[ref.split()] for ref in all_references]
+    return corpus_bleu(
+        tokenised_refs,
+        tokenised_hyps,
+        smoothing_function=SmoothingFunction().method1,
+    )
+
+
 def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer):
     """
     Train the Transformer with LR warmup, AMP mixed precision, and early stopping.
     Saves a rich checkpoint that includes epoch, val_loss, and config snapshot.
     """
     transformer.to(config.device)
+    _init_wandb_run(config)
 
     optimizer = torch.optim.Adam(
         transformer.parameters(), lr=config.learning_rate, weight_decay=1e-5
@@ -87,94 +187,111 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
     global_step = 0
     hard_decay_applied = False
 
-    for epoch in range(config.num_epochs):
-        print(f"\nEpoch {epoch + 1}/{config.num_epochs}")
-        transformer.train()
-        total_train_loss = 0
+    try:
+        for epoch in range(config.num_epochs):
+            print(f"\nEpoch {epoch + 1}/{config.num_epochs}")
+            transformer.train()
+            total_train_loss = 0
 
-        for batch in tqdm(train_dataloader, desc=f"Training Epoch {epoch + 1}", unit="batch"):
-            encoder_inputs, decoder_inputs, targets = [x.to(config.device) for x in batch]
-
-            optimizer.zero_grad()
-
-            # Improvement #5: mixed precision forward + loss
-            with torch.amp.autocast(amp_device, enabled=amp_enabled):
-                outputs = transformer(encoder_inputs, decoder_inputs)
-                loss = criterion(
-                    outputs.view(-1, outputs.size(-1)), targets.view(-1)
-                )
-
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(transformer.parameters(), config.clip_norm)
-            scaler.step(optimizer)
-            scaler.update()
-
-            # Improvement #2: warmup step — only during warmup window
-            global_step += 1
-            if global_step <= config.warmup_steps:
-                warmup_scheduler.step()
-
-            total_train_loss += loss.item()
-
-        avg_train_loss = total_train_loss / len(train_dataloader)
-        train_losses.append(avg_train_loss)
-        print(f"Epoch {epoch + 1} Training Loss: {avg_train_loss:.4f}")
-
-        # ── Validation ────────────────────────────────────────────────────────
-        transformer.eval()
-        total_val_loss = 0
-        with torch.no_grad():
-            for batch in tqdm(val_dataloader, desc=f"Validation Epoch {epoch + 1}", unit="batch"):
+            for batch in tqdm(train_dataloader, desc=f"Training Epoch {epoch + 1}", unit="batch"):
                 encoder_inputs, decoder_inputs, targets = [x.to(config.device) for x in batch]
+
+                optimizer.zero_grad()
+
+                # Improvement #5: mixed precision forward + loss
                 with torch.amp.autocast(amp_device, enabled=amp_enabled):
                     outputs = transformer(encoder_inputs, decoder_inputs)
-                    loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
-                total_val_loss += loss.item()
+                    loss = criterion(
+                        outputs.view(-1, outputs.size(-1)), targets.view(-1)
+                    )
 
-        avg_val_loss = total_val_loss / len(val_dataloader)
-        val_losses.append(avg_val_loss)
-        print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss:.4f}")
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(transformer.parameters(), config.clip_norm)
+                scaler.step(optimizer)
+                scaler.update()
 
-        # Plateau scheduler steps per-epoch (after warmup completes)
-        if global_step > config.warmup_steps:
-            plateau_scheduler.step(avg_val_loss)
+                # Improvement #2: warmup step — only during warmup window
+                global_step += 1
+                if global_step <= config.warmup_steps:
+                    warmup_scheduler.step()
 
-        if epoch + 1 == 15 and not hard_decay_applied:
-            for group in optimizer.param_groups:
-                group["lr"] *= 0.5
-            hard_decay_applied = True
-            print("LR halved at epoch 15 — forcing fine-tuning phase")
+                total_train_loss += loss.item()
 
-        # Improvement #12: qualitative samples
-        print("Sample translations:")
-        _show_translations(transformer, tokenizer, config)
+            avg_train_loss = total_train_loss / len(train_dataloader)
+            train_losses.append(avg_train_loss)
+            print(f"Epoch {epoch + 1} Training Loss: {avg_train_loss:.4f}")
 
-        # Improvement #11: rich checkpoint
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            torch.save(
+            # ── Validation ────────────────────────────────────────────────────────
+            transformer.eval()
+            total_val_loss = 0
+            with torch.no_grad():
+                for batch in tqdm(val_dataloader, desc=f"Validation Epoch {epoch + 1}", unit="batch"):
+                    encoder_inputs, decoder_inputs, targets = [x.to(config.device) for x in batch]
+                    with torch.amp.autocast(amp_device, enabled=amp_enabled):
+                        outputs = transformer(encoder_inputs, decoder_inputs)
+                        loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
+                    total_val_loss += loss.item()
+
+            avg_val_loss = total_val_loss / len(val_dataloader)
+            val_losses.append(avg_val_loss)
+            print(f"Epoch {epoch + 1} Validation Loss: {avg_val_loss:.4f}")
+
+            # Plateau scheduler steps per-epoch (after warmup completes)
+            if global_step > config.warmup_steps:
+                plateau_scheduler.step(avg_val_loss)
+
+            if epoch + 1 == 15 and not hard_decay_applied:
+                for group in optimizer.param_groups:
+                    group["lr"] *= 0.5
+                hard_decay_applied = True
+                print("LR halved at epoch 15 — forcing fine-tuning phase")
+
+            bleu_score = _compute_bleu_score(transformer, val_dataloader, config, tokenizer)
+            current_lr = optimizer.param_groups[0]["lr"]
+            wandb.log(
                 {
                     "epoch": epoch + 1,
-                    "model_state_dict": transformer.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
+                    "train_loss": avg_train_loss,
                     "val_loss": avg_val_loss,
-                    "config": vars(config),
+                    "lr": current_lr,
+                    "bleu_score": bleu_score,
                 },
-                config.model_save_path,
+                step=epoch + 1,
             )
-            print(f"Checkpoint saved at epoch {epoch + 1} — val_loss={avg_val_loss:.4f}")
-            no_improve_epochs = 0
-        else:
-            no_improve_epochs += 1
-            print(f"No improvement for {no_improve_epochs} epoch(s).")
+            print(f"Epoch {epoch + 1} BLEU Score: {bleu_score:.4f}")
 
-        if no_improve_epochs >= config.patience:
-            print(f"Early stopping after {config.patience} epochs with no improvement.")
-            break
+            # Improvement #12: qualitative samples
+            print("Sample translations:")
+            _show_translations(transformer, tokenizer, config)
 
-        plot_losses(train_losses, val_losses, epoch + 1)
-        print(f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+            # Improvement #11: rich checkpoint
+            if avg_val_loss < best_val_loss:
+                best_val_loss = avg_val_loss
+                torch.save(
+                    {
+                        "epoch": epoch + 1,
+                        "model_state_dict": transformer.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "val_loss": avg_val_loss,
+                        "config": vars(config),
+                    },
+                    config.model_save_path,
+                )
+                print(f"Checkpoint saved at epoch {epoch + 1} — val_loss={avg_val_loss:.4f}")
+                no_improve_epochs = 0
+            else:
+                no_improve_epochs += 1
+                print(f"No improvement for {no_improve_epochs} epoch(s).")
+
+            if no_improve_epochs >= config.patience:
+                print(f"Early stopping after {config.patience} epochs with no improvement.")
+                break
+
+            plot_losses(train_losses, val_losses, epoch + 1)
+            print(f"LR: {current_lr:.6f}")
+    finally:
+        wandb.finish()
 
 
 def Train():
