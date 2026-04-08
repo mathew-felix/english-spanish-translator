@@ -60,8 +60,10 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
     optimizer = torch.optim.Adam(
         transformer.parameters(), lr=config.learning_rate, weight_decay=1e-5
     )
+    amp_enabled = torch.cuda.is_available()
+    amp_device = "cuda" if amp_enabled else "cpu"
     # Improvement #5: mixed-precision scaler (no-op when CUDA not available)
-    scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
+    scaler = torch.amp.GradScaler(amp_device, enabled=amp_enabled)
 
     # Improvement #2: Noam-style warmup — linear ramp then inverse-sqrt decay
     def lr_lambda(step):
@@ -83,6 +85,7 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
     no_improve_epochs = 0
     train_losses, val_losses = [], []
     global_step = 0
+    hard_decay_applied = False
 
     for epoch in range(config.num_epochs):
         print(f"\nEpoch {epoch + 1}/{config.num_epochs}")
@@ -95,7 +98,7 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
             optimizer.zero_grad()
 
             # Improvement #5: mixed precision forward + loss
-            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+            with torch.amp.autocast(amp_device, enabled=amp_enabled):
                 outputs = transformer(encoder_inputs, decoder_inputs)
                 loss = criterion(
                     outputs.view(-1, outputs.size(-1)), targets.view(-1)
@@ -124,7 +127,7 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
         with torch.no_grad():
             for batch in tqdm(val_dataloader, desc=f"Validation Epoch {epoch + 1}", unit="batch"):
                 encoder_inputs, decoder_inputs, targets = [x.to(config.device) for x in batch]
-                with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                with torch.amp.autocast(amp_device, enabled=amp_enabled):
                     outputs = transformer(encoder_inputs, decoder_inputs)
                     loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
                 total_val_loss += loss.item()
@@ -136,6 +139,12 @@ def train_model(transformer, train_dataloader, val_dataloader, config, tokenizer
         # Plateau scheduler steps per-epoch (after warmup completes)
         if global_step > config.warmup_steps:
             plateau_scheduler.step(avg_val_loss)
+
+        if epoch + 1 == 15 and not hard_decay_applied:
+            for group in optimizer.param_groups:
+                group["lr"] *= 0.5
+            hard_decay_applied = True
+            print("LR halved at epoch 15 — forcing fine-tuning phase")
 
         # Improvement #12: qualitative samples
         print("Sample translations:")
