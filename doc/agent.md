@@ -13,7 +13,7 @@ Transformer trained from scratch in PyTorch. I am now extending it with:
 - Weights & Biases experiment tracking
 - Docker containerization
 - A HuggingFace fine-tuning comparison experiment
-- A LangGraph agentic layer with tool routing
+- A LangGraph routing layer
 - A ChromaDB RAG translation memory over 50K sentence pairs
 
 The project is ALREADY designed. The architecture is FIXED. Do not suggest changing it.

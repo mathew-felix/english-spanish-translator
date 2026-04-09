@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Institutional Translation Review</title>
+    <link rel="stylesheet" href="/assets/ui.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <p class="eyebrow">Institutional Translation Review</p>
+        <h1>Review important English-to-Spanish translations step by step.</h1>
+        <p class="hero-text">
+          This process drafts a translation with the custom model, retrieves similar Europarl
+          examples, and then revises the draft before returning the final Spanish wording.
+        </p>
+      </header>
+
+      <main class="review-layout">
+        <section class="input-panel">
+          <div class="panel-heading">
+            <p class="panel-kicker">Input</p>
+            <h2>Start a review</h2>
+            <p>Paste an institutional sentence and run the full review process.</p>
+          </div>
+
+          <form id="review-form" class="form-card">
+            <label for="review-text">English source sentence</label>
+            <textarea
+              id="review-text"
+              name="text"
+              maxlength="500"
+              placeholder="The parliamentary session was adjourned."
+            ></textarea>
+
+            <div class="example-row">
+              <button
+                type="button"
+                class="example-chip"
+                data-value="The parliamentary session was adjourned."
+              >
+                Session example
+              </button>
+              <button
+                type="button"
+                class="example-chip"
+                data-value="The committee approved the amendment."
+              >
+                Committee example
+              </button>
+              <button
+                type="button"
+                class="example-chip"
+                data-value="The Council voted on the motion."
+              >
+                Council example
+              </button>
+            </div>
+
+            <button type="submit" class="primary-button">Run review</button>
+          </form>
+
+          <div class="info-strip">
+            <article class="info-card">
+              <span class="info-label">Draft</span>
+              <strong>Custom model</strong>
+            </article>
+            <article class="info-card">
+              <span class="info-label">Context</span>
+              <strong>50K Europarl memory</strong>
+            </article>
+            <article class="info-card">
+              <span class="info-label">Review</span>
+              <strong>Decision + final wording</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="steps-panel">
+          <div class="steps-header">
+            <div>
+              <p class="panel-kicker">Process</p>
+              <h2>Review progress</h2>
+            </div>
+            <div id="status-badge" class="status-badge">Waiting for input</div>
+          </div>
+
+          <article class="review-step" id="step-draft">
+            <div class="step-number">1</div>
+            <div class="step-body">
+              <h3>Custom model draft</h3>
+              <p id="draft-output">The first-pass Spanish translation will appear here.</p>
+            </div>
+          </article>
+
+          <article class="review-step" id="step-context">
+            <div class="step-number">2</div>
+            <div class="step-body">
+              <h3>Retrieved examples</h3>
+              <div id="context-output" class="context-list">
+                Similar bilingual examples will appear here.
+              </div>
+            </div>
+          </article>
+
+          <article class="review-step" id="step-decision">
+            <div class="step-number">3</div>
+            <div class="step-body">
+              <h3>Review decision</h3>
+              <p id="decision-output">The review decision will appear here.</p>
+            </div>
+          </article>
+
+          <article class="review-step" id="step-final">
+            <div class="step-number">4</div>
+            <div class="step-body">
+              <div class="final-header">
+                <h3>Final translation</h3>
+                <span id="latency-badge" class="latency-pill">Waiting</span>
+              </div>
+              <p id="final-output">The final reviewed Spanish translation will appear here.</p>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/assets/ui.js"></script>
+  </body>
+</html>

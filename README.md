@@ -2,7 +2,13 @@
 
 [![Weights & Biases](https://img.shields.io/badge/W%26B-Latest%20Run-FFBE00?logo=weightsandbiases&logoColor=black)](https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti)
 
-This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. The repository now includes the full training pipeline, evaluation, Weights & Biases tracking, a Colab training notebook, and a FastAPI inference layer.
+This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. The repository focuses on one application: institutional translation review, where the custom model produces the first draft, retrieval memory finds similar Europarl examples, and GPT revises the draft before the final Spanish translation is returned.
+
+This repository is presented as a focused ML systems project:
+
+- train a translation model from scratch
+- evaluate it honestly against a stronger pretrained baseline
+- use retrieval and GPT only where domain-specific review is useful
 
 ## Latest Verified Run
 
@@ -27,15 +33,30 @@ Run links:
 - Project: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator
 - Latest run: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
-## Features
+## What This Project Solves
+
+The project is built for this problem:
+
+- produce a first English-to-Spanish translation with a custom model
+- improve institutional and parliamentary wording when terminology consistency matters
+
+The main process is:
+
+1. generate a draft with the custom Transformer
+2. retrieve similar Europarl sentence pairs
+3. review the draft with GPT using those examples
+4. return the final Spanish translation
+
+This design keeps the custom model as the core translation engine while using GPT only for the final revision step.
+
+## What Is Actually Strong Here
 
 - Custom encoder-decoder Transformer implemented from scratch in PyTorch
-- OPUS English-Spanish corpus mix: `Europarl + News-Commentary + TED2020 + filtered OpenSubtitles`
-- Tokenization with `bert-base-multilingual-cased` plus custom special tokens
-- Training with AMP, warmup scheduling, label smoothing, gradient clipping, and W&B logging
-- Corpus-level evaluation with `sacrebleu`
-- Colab notebook for GPU training and Google Drive artifact export
-- FastAPI inference endpoint with `/health`, `/translate`, and Swagger docs
+- Real large-scale training run on `4.39M` English-Spanish pairs
+- Honest evaluation with `31.41 sacreBLEU` on the held-out test split
+- Baseline comparison against `Helsinki-NLP/opus-mt-en-es`
+- Focused review path for institutional translation
+- FastAPI and Docker deployment so the system is runnable end to end
 
 ## Tech Stack
 
@@ -46,6 +67,11 @@ Run links:
 - Pydantic v2
 - Weights & Biases
 - pandas / NumPy / matplotlib / tqdm / sacrebleu
+
+Implementation note:
+
+- LangGraph, ChromaDB, and GPT are used as supporting components for the review path
+- they are not the main story of the project
 
 ## Installation
 
@@ -150,6 +176,12 @@ What the manual 50-sentence comparison showed on the local CPU run:
 - the biggest custom-model errors showed up on technology, shopping, and household phrasing
 - the main quality gap is still best explained by pretrained data scale and model maturity, not by the impossibility of the basic encoder-decoder architecture itself
 
+What this means:
+
+- MarianMT is the stronger choice for broad everyday translation
+- the custom model is still strong enough to prove the architecture and training pipeline are real
+- the review path exists because the custom model benefits from extra domain-specific context on institutional language
+
 Ten real side-by-side examples from the manual comparison set:
 
 | English | Custom Transformer | Helsinki MarianMT |
@@ -164,6 +196,43 @@ Ten real side-by-side examples from the manual comparison set:
 | Did you remember to back up the files? | ¿Recuerdas retrasar los archivos? | ¿Te acordaste de hacer copias de seguridad de los archivos? |
 | I need to reset my password again. | Necesito reanudar mi contraseña otra vez. | Necesito restablecer mi contraseña de nuevo. |
 | The washing machine stopped working this morning. | La lavadora dejó de trabajar esta mañana. | La lavadora dejó de funcionar esta mañana. |
+
+## Application
+
+The main application path is institutional translation review:
+
+1. submit an English institutional sentence
+2. generate a first-pass draft with the custom model
+3. retrieve the top 3 similar Europarl translation pairs
+4. review the draft with GPT using those retrieved examples
+5. return the final Spanish translation
+
+Verified example:
+
+```json
+{
+  "input": "The parliamentary session was adjourned.",
+  "draft_translation": "Se suspendió la sesión parlamentaria.",
+  "decision": "EDIT",
+  "final_translation": "Se interrumpe la sesión parlamentaria."
+}
+```
+
+## When To Use Each Path
+
+Use `POST /translate` when:
+
+- the sentence is ordinary everyday English
+- you just want the direct custom-model output
+
+Use `POST /institutional-review` when:
+
+- the sentence is parliamentary, committee, council, motion, or amendment language
+- terminology consistency matters more than raw speed
+
+Do not overclaim this review path.
+
+It is useful for institutional wording because the retrieval memory is built from Europarl. It is not intended as a universal improvement layer for all casual translation.
 
 ## API
 
@@ -199,9 +268,67 @@ Observed local response from the current checkpoint:
 
 The exact latency depends on local hardware. The response above is from the latest local verification run on CPU.
 
+Institutional review request:
+
+```bash
+curl -X POST http://localhost:8000/institutional-review \
+  -H "Content-Type: application/json" \
+  -d '{"text": "The parliamentary session was adjourned."}'
+```
+
+Observed response:
+
+```json
+{
+  "input": "The parliamentary session was adjourned.",
+  "draft_translation": "Se suspendió la sesión parlamentaria.",
+  "decision": "EDIT",
+  "final_translation": "Se interrumpe la sesión parlamentaria.",
+  "retrieved_examples": [
+    {
+      "english": "The session is adjourned.",
+      "spanish": "Se interrumpe el periodo de sesiones.",
+      "distance": 0.177841
+    },
+    {
+      "english": "Adjournment of the session",
+      "spanish": "Interrupción del periodo de sesiones",
+      "distance": 0.225302
+    },
+    {
+      "english": "I declare adjourned the session of the European Parliament.",
+      "spanish": "Declaro interrumpido el período de sesiones del Parlamento Europeo.",
+      "distance": 0.298554
+    }
+  ],
+  "latency_ms": 10508.06
+}
+```
+
 Swagger UI screenshot:
 
 ![Swagger UI](assets/swagger_demo.png)
+
+Browser walkthrough GIF:
+
+![Institutional review walkthrough](assets/ui_demo.gif)
+
+## Architecture Summary
+
+The project should be described in this order:
+
+1. custom translation model from scratch
+2. large-scale training and evaluation
+3. baseline comparison against MarianMT
+4. institutional review path built on top of the model
+
+That is the correct emphasis.
+
+The project should not be described primarily as:
+
+- a general-purpose Spanish helper
+- an all-purpose automation product
+- a research contribution on large language models
 
 ## Weights & Biases
 
@@ -220,6 +347,8 @@ Latest verified run:
 
 - `doc/PROJECT_REPORT.md`: current project-wide status
 - `doc/PROJECT_FASTAPI_REPORT.md`: FastAPI inference layer report
+- `doc/PROJECT_AGENT_REPORT.md`: focused LangGraph routing report
+- `doc/PROJECT_RAG_REPORT.md`: translation-memory review report
 - `doc/TRAINING_REPORT.md`: completed training run report
 - `doc/HF_COMPARISON_REPORT.md`: Hugging Face baseline comparison report
 - `doc/MODEL_SPOTCHECK_REPORT.md`: exported checkpoint spot-check results

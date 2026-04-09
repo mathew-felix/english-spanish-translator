@@ -1,5 +1,5 @@
-"""Smoke-test runner for the LangGraph agent.
-It validates that the required demo queries route to the expected tools.
+"""Smoke-test runner for the focused LangGraph translation router.
+It validates routing between direct translation and institutional review.
 """
 
 import os
@@ -22,9 +22,9 @@ from agent.tools import get_api_base_url, load_local_env
 
 TEST_CASES = [
     ("Translate 'I need a doctor' to Spanish", "translate_with_custom_model"),
-    ("What does biblioteca mean?", "get_spanish_word_info"),
-    ("Explain why Spanish uses ser vs estar", "explain_spanish_grammar"),
     ("How do you say 'the train is late'?", "translate_with_custom_model"),
+    ("Translate 'The parliamentary session was adjourned.' to Spanish", "rag_translate"),
+    ("Translate 'The committee approved the amendment.' to Spanish", "rag_translate"),
 ]
 
 
@@ -105,7 +105,7 @@ def _cleanup_process(process: Optional[subprocess.Popen]) -> None:
 
 def _selected_tool_name(messages: list) -> str:
     """Extract the first tool name selected by the agent.
-    The first AI message with `tool_calls` defines the route for the query.
+    The first model message with `tool_calls` defines the route for the query.
     """
     for message in messages:
         if isinstance(message, AIMessage) and message.tool_calls:
@@ -114,7 +114,7 @@ def _selected_tool_name(messages: list) -> str:
 
 
 def main() -> None:
-    """Run the four required routing checks through the compiled graph.
+    """Run the focused routing checks through the compiled graph.
     The script exits with a non-zero status if any query chooses the wrong tool.
     """
     load_local_env()

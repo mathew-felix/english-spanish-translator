@@ -6,6 +6,12 @@ Updated: 2026-04-09
 
 This repository now contains a working English-to-Spanish translation project built around a custom Transformer implemented from scratch in PyTorch.
 
+The project is now intentionally narrow in presentation:
+
+- it is a custom ML translation system first
+- it uses retrieval and GPT as a revision step for institutional language
+- it is not positioned as a general-purpose language helper
+
 What is currently implemented:
 
 - CLI pipeline for download, preprocessing, training, and evaluation
@@ -15,13 +21,13 @@ What is currently implemented:
 - Colab training notebook
 - FastAPI inference endpoint
 - Hugging Face baseline comparison against MarianMT
+- Docker packaging
+- LangGraph routing layer
+- ChromaDB RAG translation memory
 - Swagger UI screenshot and API documentation
 
 What is not implemented yet:
 
-- Docker packaging
-- LangGraph agent layer
-- ChromaDB RAG layer
 - `CURRENT_PROJECT_STATUS.md`
 
 ## Implemented Components
@@ -38,6 +44,9 @@ What is not implemented yet:
 | Inference | `source/inference.py` loads the model once and exposes `translate(text)` |
 | API | `serve.py` exposes `/health` and `/translate` with FastAPI |
 | Colab | `colab_training.ipynb` supports setup, training, evaluation, and artifact export |
+| Docker | `Dockerfile` and `docker-compose.yml` run the API in a container |
+| Agent | `agent/` contains the LangGraph routing layer and tool runner |
+| RAG | `rag/` contains the ChromaDB translation-memory builder and retriever |
 
 ## Current File Inventory
 
@@ -55,11 +64,21 @@ What is not implemented yet:
 | `source/Train.py` | training loop and W&B logging |
 | `source/Evaluate.py` | checkpoint-aware full test-set evaluation |
 | `source/inference.py` | checkpoint-aware inference singleton |
+| `templates/index.html` | browser UI for the institutional review process |
+| `assets/ui.js` | step-by-step institutional review frontend logic |
+| `assets/ui.css` | styling for the institutional review page |
+| `Dockerfile` | container build for the FastAPI service |
+| `docker-compose.yml` | local multi-file container launch for the API |
+| `agent/graph.py` | LangGraph agent loop and conditional routing |
+| `agent/tools.py` | direct translation and RAG review tools |
+| `agent/run.py` | local routing smoke test |
+| `rag/build_index.py` | builds the persistent Chroma translation memory |
+| `rag/retriever.py` | lazy-loaded retrieval over the translation memory |
 | `finetune/baseline_hf.py` | Hugging Face comparison runner |
 | `finetune/manual_comparison_test_set.csv` | hand-written 50-row comparison benchmark |
 | `finetune/custom_model_results_manual.json` | custom-model outputs on the manual benchmark |
 | `finetune/baseline_results_manual.json` | MarianMT outputs on the manual benchmark |
-| `colab_training.ipynb` | Colab workflow |
+| `colab_training.ipynb` | Colab run notebook |
 | `assets/swagger_demo.png` | FastAPI Swagger screenshot |
 
 ### Reports
@@ -68,6 +87,8 @@ What is not implemented yet:
 | --- | --- |
 | `doc/PROJECT_REPORT.md` | project-wide status |
 | `doc/PROJECT_FASTAPI_REPORT.md` | FastAPI phase report |
+| `doc/PROJECT_AGENT_REPORT.md` | LangGraph agent report |
+| `doc/PROJECT_RAG_REPORT.md` | RAG translation-memory report |
 | `doc/TRAINING_REPORT.md` | completed training run report |
 | `doc/HF_COMPARISON_REPORT.md` | MarianMT baseline comparison report |
 | `doc/MODEL_SPOTCHECK_REPORT.md` | exported checkpoint spot-check results |
@@ -152,6 +173,7 @@ Current endpoints:
 
 - `GET /health`
 - `POST /translate`
+- `POST /institutional-review`
 
 The API:
 
@@ -160,6 +182,7 @@ The API:
 - retries with a narrower beam when wide-beam decoding returns empty output
 - validates input with Pydantic v2
 - returns translation text and `latency_ms`
+- exposes the structured institutional review flow for the browser UI
 
 Observed local translation response:
 
@@ -172,6 +195,101 @@ Observed local translation response:
 ```
 
 The exact latency is local-runtime dependent. This response was re-verified on 2026-04-09 after restoring the exported Colab artifacts into the project paths used by `Config`.
+
+## Docker Layer
+
+Docker packaging is implemented and verified locally.
+
+Current files:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `.dockerignore`
+
+Verified local result:
+
+- `docker compose up --build` starts the API successfully
+- `GET /health` returns `{"status":"ok"}`
+- `POST /translate` returns the same translation path as the local FastAPI process
+
+This means the translation API can now be started from a clean container build instead of depending on the local Python environment.
+
+## Focused Application Layer
+
+The project is now centered on one application flow:
+
+- institutional English sentence in
+- custom model creates the first Spanish draft
+- retrieval memory surfaces similar Europarl examples
+- GPT reviews the draft against those examples
+- final Spanish translation is returned
+
+This flow is available through:
+
+- the browser UI at `/`
+- the structured API endpoint `POST /institutional-review`
+
+Verified structured result:
+
+```json
+{
+  "input": "The parliamentary session was adjourned.",
+  "draft_translation": "Se suspendió la sesión parlamentaria.",
+  "decision": "EDIT",
+  "final_translation": "Se interrumpe la sesión parlamentaria."
+}
+```
+
+When this flow should be used:
+
+- parliamentary wording
+- committee and council language
+- amendments, motions, and other institutional text
+
+When it should not be oversold:
+
+- general everyday translation
+- casual conversation
+- broad consumer translation quality claims
+
+## Review Path Implementation
+
+The repository now includes both:
+
+- a lightweight routing layer
+- a ChromaDB-based translation-memory layer
+
+The focused agent now exposes two tools:
+
+- `translate_with_custom_model`
+- `rag_translate`
+
+The graph structure remains:
+
+`START -> agent -> tools -> agent -> END`
+
+The most important verified hybrid behavior is now in `rag_translate`:
+
+- the custom model generates the first translation draft
+- ChromaDB retrieves the top 3 similar Europarl pairs
+- GPT-4o-mini reviews the draft against the retrieved context
+- GPT either keeps the draft or edits it
+
+Verified example after OpenAI billing was enabled:
+
+```text
+Decision: EDIT
+Custom model draft: Se suspendió la sesión parlamentaria.
+Translation: Se interrumpe la sesión parlamentaria.
+```
+
+This is the key architectural improvement because it creates a real dependency between the custom model and GPT instead of treating them as unrelated features.
+
+Important positioning note:
+
+- LangGraph is an implementation detail here
+- the project value is not “I used LangGraph”
+- the project value is “I built a revision path on top of my own trained model”
 
 ## Hugging Face Comparison Layer
 
@@ -230,19 +348,18 @@ What is genuinely strong in the current project:
 - W&B experiment tracking works
 - full evaluation works
 - FastAPI serving works
+- Dockerized serving works
+- LangGraph routing works
+- ChromaDB retrieval works
+- GPT-backed draft review works on the RAG translation path
+- the browser demo now presents one coherent application instead of multiple unrelated side features
 - MarianMT comparison artifacts now exist for interview discussion
 - exported Colab artifacts can now be reloaded locally for evaluation and serving
-- Colab workflow works on high-memory GPU hardware
+- the Colab run notebook works on high-memory GPU hardware
 
 ## Remaining Gaps
 
 The project is functional, but several planned layers are still missing:
-
-- Docker / container deployment
-- LangGraph orchestration
-- RAG translation memory
-
-Also still missing:
 
 - a cleaned, fully current `CURRENT_PROJECT_STATUS.md`
 - a true production deployment story
@@ -256,7 +373,18 @@ This project has moved beyond a simple training script. It is now a working ML s
 - a real multi-corpus training run
 - verified W&B tracking
 - a FastAPI inference layer
+- Docker packaging
+- a focused institutional review path
+- a ChromaDB translation memory
 - Colab-based reproducible training
+
+The strongest honest description is:
+
+> a custom English-to-Spanish translation model with a domain-aware revision path for institutional language
+
+The weakest description would be:
+
+> an all-purpose translation product
 
 The strongest current claim is:
 

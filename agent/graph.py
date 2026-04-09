@@ -1,4 +1,4 @@
-"""LangGraph routing for translation, grammar, and vocabulary requests.
+"""LangGraph routing for direct translation and institutional review.
 The graph shape is fixed: agent -> tools -> agent with conditional routing to END.
 """
 
@@ -16,11 +16,9 @@ from agent.tools import TOOLS, load_local_env
 
 
 SYSTEM_PROMPT = (
-    "You are an English-to-Spanish assistant that must route requests to the correct tool. "
-    "Use translate_with_custom_model for translation requests or 'how do you say' questions. "
-    "Use rag_translate for parliamentary, committee, motion, session, or other institutional translation requests. "
-    "Use explain_spanish_grammar for grammar questions. "
-    "Use get_spanish_word_info for vocabulary meaning questions. "
+    "You are an English-to-Spanish translation router. "
+    "Use translate_with_custom_model for general translation requests or 'how do you say' questions. "
+    "Use rag_translate for parliamentary, committee, motion, session, council, or other institutional translation requests. "
     "If a tool result is already present, answer directly without calling another tool."
 )
 
@@ -81,42 +79,6 @@ def _tool_schemas() -> list[dict]:
                         }
                     },
                     "required": ["text"],
-                    "additionalProperties": False,
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "explain_spanish_grammar",
-                "description": "Explain a Spanish grammar rule or grammar distinction.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {
-                            "type": "string",
-                            "description": "The user's Spanish grammar question.",
-                        }
-                    },
-                    "required": ["question"],
-                    "additionalProperties": False,
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_spanish_word_info",
-                "description": "Explain the meaning and usage of a Spanish word.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {
-                            "type": "string",
-                            "description": "The user's vocabulary or word-meaning question.",
-                        }
-                    },
-                    "required": ["question"],
                     "additionalProperties": False,
                 },
             },
@@ -196,26 +158,12 @@ def _extract_latest_user_text(messages: list[AnyMessage]) -> str:
 
 def _heuristic_tool_call(user_text: str) -> Optional[dict]:
     """Select a tool deterministically when OpenAI is unavailable.
-    The fallback is intentionally narrow and targets the required demo queries.
+    The fallback is intentionally narrow and targets the focused translation path.
     """
     lowered = user_text.lower().strip()
     if not lowered:
         return None
 
-    if "what does" in lowered or "mean" in lowered:
-        return {
-            "name": "get_spanish_word_info",
-            "args": {"question": user_text},
-            "id": "offline_word_info",
-            "type": "tool_call",
-        }
-    if "explain" in lowered or "grammar" in lowered or "ser vs estar" in lowered:
-        return {
-            "name": "explain_spanish_grammar",
-            "args": {"question": user_text},
-            "id": "offline_grammar",
-            "type": "tool_call",
-        }
     if "translate" in lowered or "how do you say" in lowered or "to spanish" in lowered:
         text_match = None
         if "'" in user_text:
@@ -318,8 +266,8 @@ def agent_node(state: AgentState) -> dict[str, list[AnyMessage]]:
         "messages": [
             AIMessage(
                 content=(
-                    "I can translate English to Spanish, explain Spanish grammar, "
-                    "or explain the meaning of a Spanish word."
+                    "I can translate English to Spanish and route institutional sentences "
+                    "through the translation review path."
                 )
             )
         ]
@@ -328,7 +276,7 @@ def agent_node(state: AgentState) -> dict[str, list[AnyMessage]]:
 
 def should_continue(state: AgentState) -> str:
     """Route to ToolNode when the agent emitted tool calls.
-    Returning `END` stops the graph after a direct assistant answer.
+    Returning `END` stops the graph after a direct response.
     """
     last = state["messages"][-1]
     if hasattr(last, "tool_calls") and last.tool_calls:
@@ -337,7 +285,7 @@ def should_continue(state: AgentState) -> str:
 
 
 def build_graph():
-    """Build and compile the fixed LangGraph agent workflow.
+    """Build and compile the fixed LangGraph routing graph.
     The graph shape remains `agent -> tools -> agent` until no tool calls remain.
     """
     graph = StateGraph(AgentState)

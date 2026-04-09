@@ -8,6 +8,12 @@ This report documents the Phase 7 Retrieval-Augmented Generation implementation 
 
 The goal of this phase was to add a translation memory over 50,000 Europarl sentence pairs so the system can retrieve similar institutional wording before producing a translation. This improves terminology consistency for parliamentary and formal-domain text without changing the underlying custom Transformer architecture.
 
+This review path should be described carefully:
+
+- it is meant for institutional language
+- it is not a claim that GPT or retrieval improves every sentence
+- it is not a replacement for honest baseline comparison
+
 The RAG layer follows the project design exactly:
 
 - vector store: ChromaDB persistent client
@@ -145,19 +151,22 @@ The new agent tool is implemented in `agent/tools.py` as `rag_translate`.
 
 ### What `rag_translate` does
 
-1. retrieves the top 3 similar English-Spanish Europarl pairs
-2. formats those pairs into compact bilingual context
-3. sends the user text plus retrieved context to GPT-4o-mini
-4. returns both the final translation and the retrieved context
+1. calls the custom FastAPI translation model first to get a draft translation
+2. retrieves the top 3 similar English-Spanish Europarl pairs
+3. formats those pairs into compact bilingual context
+4. sends the source text, the custom-model draft, and the retrieved context to GPT-4o-mini
+5. returns the decision, the original draft, the final translation, and the retrieved context
 
 ### Prompting behavior
 
-The tool prompt tells GPT-4o-mini to:
+The GPT review prompt tells GPT-4o-mini to:
 
-- translate English into Spanish
+- review a custom English-to-Spanish draft
 - preserve parliamentary and institutional terminology
 - use the retrieved examples for consistency
-- return only the final Spanish translation
+- keep the draft when it is already correct
+- make the smallest necessary edit when the draft should be improved
+- return both a `KEEP` or `EDIT` decision and the final translation
 
 ### Offline fallback
 
@@ -165,9 +174,10 @@ If `OPENAI_API_KEY` is not available, `rag_translate` does not fail.
 
 Instead, it:
 
+- still gets the custom-model draft
 - still performs retrieval
 - still logs the retrieved context
-- falls back to the custom FastAPI translator for the final translation
+- keeps the custom-model draft as the final translation
 
 This keeps the RAG pipeline demonstrable even when OpenAI access is unavailable locally.
 
@@ -238,11 +248,13 @@ Top retrieved rows:
 2. `Adjournment of the session` → `Interrupción del periodo de sesiones`
 3. `I declare adjourned the session of the European Parliament.` → `Declaro interrumpido el período de sesiones del Parlamento Europeo.`
 
-### `rag_translate` output example
+### Initial offline `rag_translate` output example
 
 Observed tool output:
 
 ```text
+Decision: KEEP (offline fallback)
+Custom model draft: Se suspendió la sesión parlamentaria.
 Translation: Se suspendió la sesión parlamentaria.
 Retrieved context:
 1. EN: The session is adjourned. | ES: Se interrumpe el periodo de sesiones. | distance=0.177841
@@ -250,10 +262,61 @@ Retrieved context:
 3. EN: I declare adjourned the session of the European Parliament. | ES: Declaro interrumpido el período de sesiones del Parlamento Europeo. | distance=0.298554
 ```
 
-This shows that the tool is returning both:
+This shows that the tool returns:
 
+- a review decision
+- the custom-model draft
 - a final Spanish translation
 - the exact retrieved bilingual context used for that decision
+
+### Verified GPT-backed review output
+
+After `OPENAI_API_KEY` was configured with working billing, the same tool path was re-tested successfully.
+
+Observed output:
+
+```text
+Decision: EDIT
+Custom model draft: Se suspendió la sesión parlamentaria.
+Translation: Se interrumpe la sesión parlamentaria.
+Retrieved context:
+1. EN: The session is adjourned. | ES: Se interrumpe el periodo de sesiones. | distance=0.177841
+2. EN: Adjournment of the session | ES: Interrupción del periodo de sesiones | distance=0.225302
+3. EN: I declare adjourned the session of the European Parliament. | ES: Declaro interrumpido el período de sesiones del Parlamento Europeo. | distance=0.298554
+```
+
+This is the important dependency result for the project:
+
+- the custom model generated the first-pass translation
+- retrieval supplied domain memory
+- GPT revised the draft using the retrieved examples
+
+So the RAG path is no longer just "GPT translates with context." It is now "custom model drafts, GPT reviews and edits when needed."
+
+## When The Review Path Helps
+
+This flow is strongest when:
+
+- the sentence is close to Europarl style
+- terminology consistency matters
+- a similar institutional phrasing likely already exists in the memory
+
+Examples:
+
+- parliamentary sessions
+- committee actions
+- council decisions
+- motions and amendments
+
+## When The Review Path Is Not The Right Story
+
+This flow is weaker when:
+
+- the sentence is casual or conversational
+- the topic is far from parliamentary language
+- the retrieved Europarl examples are only loosely related
+
+That is why the project should not claim that this path is a universal translation improvement layer. It is a domain-aware revision layer.
 
 ## Validation Outcome
 
@@ -264,21 +327,23 @@ What is confirmed:
 - the index builds from local training data
 - the retriever returns sensible Europarl neighbors
 - the agent routes institutional translation requests to `rag_translate`
+- the custom model is now a required first-pass step in `rag_translate`
+- GPT-backed review successfully edited a real custom-model draft after OpenAI billing was enabled
 - the original four-agent smoke-test queries still pass
 - the graph structure was preserved exactly
 
 ## Known Limitations
 
-### 1. GPT path depends on `OPENAI_API_KEY`
+### 1. GPT review path depends on `OPENAI_API_KEY`
 
 Without an OpenAI key:
 
 - retrieval still works
 - routing still works
 - context is still shown
-- final wording falls back to the custom translation API instead of GPT-4o-mini
+- the custom-model draft is kept unchanged
 
-So the RAG layer is operational, but the full retrieval-plus-GPT generation path is only active when `OPENAI_API_KEY` is configured.
+So the RAG layer is operational, but the full draft-review path is only active when `OPENAI_API_KEY` is configured and the account has available quota.
 
 ### 2. Chroma telemetry warnings still appear
 
@@ -323,6 +388,15 @@ Run the agent smoke test:
 venv/bin/python agent/run.py
 ```
 
+Test the full GPT-backed review path directly:
+
+```bash
+venv/bin/python - <<'PY'
+from agent.tools import rag_translate
+print(rag_translate.invoke({"text": "The parliamentary session was adjourned."}))
+PY
+```
+
 ## Final Assessment
 
 This phase successfully turns the project from a plain translation API into a translation system with domain memory.
@@ -332,6 +406,7 @@ The important outcome is not just that ChromaDB was added. The important outcome
 - recognize institutional translation requests
 - retrieve similar known bilingual wording
 - expose that context for traceability
-- use that context in generation when GPT-4o-mini is available
+- force the custom model to produce the first draft
+- let GPT-4o-mini review that draft against translation-memory examples
 
 That makes the translation stack more defensible in interviews because it shows retrieval, orchestration, and domain adaptation on top of the core custom model.

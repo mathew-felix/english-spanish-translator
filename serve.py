@@ -1,10 +1,19 @@
+import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from agent.tools import build_rag_translation_review
 from source.inference import get_inference_engine, translate
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
 class TranslationRequest(BaseModel):
@@ -39,6 +48,33 @@ class TranslationResponse(BaseModel):
     latency_ms: float
 
 
+class ReviewContextExample(BaseModel):
+    """Return one retrieved bilingual example used during review.
+    Distances are included so the UI can show why an example was surfaced.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    english: str
+    spanish: str
+    distance: float
+
+
+class InstitutionalReviewResponse(BaseModel):
+    """Return the staged institutional-translation review output.
+    The response is structured so the UI can reveal each step separately.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input: str
+    draft_translation: str
+    decision: str
+    final_translation: str
+    retrieved_examples: list[ReviewContextExample]
+    latency_ms: float
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the model once when the API process starts.
@@ -53,6 +89,19 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="assets")
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    """Render the browser UI for the translator demo.
+    The page focuses on institutional translation review as the main application path.
+    """
+    return TEMPLATES.TemplateResponse(
+        request,
+        "index.html",
+        {},
+    )
 
 
 @app.get("/health")
@@ -81,5 +130,37 @@ def translate_endpoint(payload: TranslationRequest):
     return TranslationResponse(
         input=payload.text,
         translation=translated_text,
+        latency_ms=latency_ms,
+    )
+
+
+@app.post("/institutional-review", response_model=InstitutionalReviewResponse)
+def institutional_review_endpoint(payload: TranslationRequest):
+    """Run the institutional translation-review process.
+    This endpoint exposes the custom draft, retrieval context, and review decision separately.
+    """
+    started_at = time.perf_counter()
+
+    try:
+        review_result = build_rag_translation_review(payload.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    return InstitutionalReviewResponse(
+        input=review_result["input"],
+        draft_translation=review_result["draft_translation"],
+        decision=review_result["decision"],
+        final_translation=review_result["final_translation"],
+        retrieved_examples=[
+            ReviewContextExample(
+                english=pair["english"],
+                spanish=pair["spanish"],
+                distance=pair["distance"],
+            )
+            for pair in review_result["retrieved_pairs"]
+        ],
         latency_ms=latency_ms,
     )
