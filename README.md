@@ -2,17 +2,11 @@
 
 [![Weights & Biases](https://img.shields.io/badge/W%26B-Latest%20Run-FFBE00?logo=weightsandbiases&logoColor=black)](https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti)
 
-This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. The repository focuses on one application: institutional translation review, where the custom model produces the first draft, retrieval memory finds similar Europarl examples, and GPT revises the draft before the final Spanish translation is returned.
-
-This repository is presented as a focused ML systems project:
-
-- train a translation model from scratch
-- evaluate it honestly against a stronger pretrained baseline
-- use retrieval and GPT only where domain-specific review is useful
+This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. It includes a full training pipeline, a MarianMT baseline comparison, a FastAPI service, and a second translation path for institutional text where the custom model draft is revised using retrieved Europarl examples and GPT.
 
 ## Latest Verified Run
 
-The latest full end-to-end training run was completed in Colab and captured in `output.txt`.
+The latest full end-to-end training run is summarized in `doc/PROJECT_REPORT.md`.
 
 | Item | Value |
 | --- | --- |
@@ -33,30 +27,21 @@ Run links:
 - Project: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator
 - Latest run: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
-## What This Project Solves
+## Overview
 
-The project is built for this problem:
+The repository covers two translation paths:
 
-- produce a first English-to-Spanish translation with a custom model
-- improve institutional and parliamentary wording when terminology consistency matters
+1. direct translation with the custom Transformer
+2. institutional translation revision using translation memory and GPT
 
-The main process is:
+The institutional path runs in this order:
 
 1. generate a draft with the custom Transformer
 2. retrieve similar Europarl sentence pairs
 3. review the draft with GPT using those examples
 4. return the final Spanish translation
 
-This design keeps the custom model as the core translation engine while using GPT only for the final revision step.
-
-## What Is Actually Strong Here
-
-- Custom encoder-decoder Transformer implemented from scratch in PyTorch
-- Real large-scale training run on `4.39M` English-Spanish pairs
-- Honest evaluation with `31.41 sacreBLEU` on the held-out test split
-- Baseline comparison against `Helsinki-NLP/opus-mt-en-es`
-- Focused review path for institutional translation
-- FastAPI and Docker deployment so the system is runnable end to end
+The custom model remains the translation engine in both cases. The institutional path adds retrieved Europarl context and a final revision step for parliamentary terminology.
 
 ## Tech Stack
 
@@ -68,10 +53,11 @@ This design keeps the custom model as the core translation engine while using GP
 - Weights & Biases
 - pandas / NumPy / matplotlib / tqdm / sacrebleu
 
-Implementation note:
+Additional components:
 
-- LangGraph, ChromaDB, and GPT are used as supporting components for the review path
-- they are not the main story of the project
+- LangGraph routes between the direct path and the institutional path
+- ChromaDB stores the translation memory used by the institutional path
+- GPT is used only in the final revision step after draft generation and retrieval
 
 ## Installation
 
@@ -129,7 +115,7 @@ Late-epoch qualitative samples from the training log:
 - `Where is the hospital? -> ¿Dónde está el hospital?`
 - `I need help with my homework. -> Necesito ayuda con mis deberes.`
 
-Detailed run analysis is in `doc/TRAINING_REPORT.md`.
+Run summary, system architecture, API notes, and comparison results are in `doc/PROJECT_REPORT.md`.
 
 ## Hugging Face Comparison
 
@@ -141,8 +127,6 @@ Artifacts:
 
 - `finetune/baseline_hf.py`
 - `finetune/manual_comparison_test_set.csv`
-- `finetune/custom_model_results_manual.json`
-- `finetune/baseline_results_manual.json`
 
 Command used:
 
@@ -153,6 +137,8 @@ venv/bin/python finetune/baseline_hf.py \
   --custom-output custom_model_results_manual.json \
   --baseline-output baseline_results_manual.json
 ```
+
+The comparison result files are kept locally. The benchmark setup and measured results are summarized in `doc/PROJECT_REPORT.md`.
 
 Manual comparison set:
 
@@ -176,11 +162,11 @@ What the manual 50-sentence comparison showed on the local CPU run:
 - the biggest custom-model errors showed up on technology, shopping, and household phrasing
 - the main quality gap is still best explained by pretrained data scale and model maturity, not by the impossibility of the basic encoder-decoder architecture itself
 
-What this means:
+Comparison summary:
 
 - MarianMT is the stronger choice for broad everyday translation
-- the custom model is still strong enough to prove the architecture and training pipeline are real
-- the review path exists because the custom model benefits from extra domain-specific context on institutional language
+- the custom model is still useful for demonstrating the architecture and training pipeline
+- the institutional path exists because the custom model benefits from extra domain-specific context on parliamentary language
 
 Ten real side-by-side examples from the manual comparison set:
 
@@ -197,9 +183,9 @@ Ten real side-by-side examples from the manual comparison set:
 | I need to reset my password again. | Necesito reanudar mi contraseña otra vez. | Necesito restablecer mi contraseña de nuevo. |
 | The washing machine stopped working this morning. | La lavadora dejó de trabajar esta mañana. | La lavadora dejó de funcionar esta mañana. |
 
-## Application
+## Institutional Translation Path
 
-The main application path is institutional translation review:
+The institutional translation path runs as follows:
 
 1. submit an English institutional sentence
 2. generate a first-pass draft with the custom model
@@ -230,9 +216,7 @@ Use `POST /institutional-review` when:
 - the sentence is parliamentary, committee, council, motion, or amendment language
 - terminology consistency matters more than raw speed
 
-Do not overclaim this review path.
-
-It is useful for institutional wording because the retrieval memory is built from Europarl. It is not intended as a universal improvement layer for all casual translation.
+The institutional path is tuned for Europarl-style wording because the translation memory is built from Europarl. It is not the default path for casual everyday sentences.
 
 ## API
 
@@ -313,22 +297,14 @@ Browser walkthrough GIF:
 
 ![Institutional review walkthrough](assets/ui_demo.gif)
 
-## Architecture Summary
+## Project Scope
 
-The project should be described in this order:
+Main technical components:
 
 1. custom translation model from scratch
 2. large-scale training and evaluation
 3. baseline comparison against MarianMT
-4. institutional review path built on top of the model
-
-That is the correct emphasis.
-
-The project should not be described primarily as:
-
-- a general-purpose Spanish helper
-- an all-purpose automation product
-- a research contribution on large language models
+4. institutional translation path built on top of the model
 
 ## Weights & Biases
 
@@ -343,15 +319,9 @@ Latest verified run:
 
 - https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
-## Reports
+## Documentation
 
-- `doc/PROJECT_REPORT.md`: current project-wide status
-- `doc/PROJECT_FASTAPI_REPORT.md`: FastAPI inference layer report
-- `doc/PROJECT_AGENT_REPORT.md`: focused LangGraph routing report
-- `doc/PROJECT_RAG_REPORT.md`: translation-memory review report
-- `doc/TRAINING_REPORT.md`: completed training run report
-- `doc/HF_COMPARISON_REPORT.md`: Hugging Face baseline comparison report
-- `doc/MODEL_SPOTCHECK_REPORT.md`: exported checkpoint spot-check results
+- `doc/PROJECT_REPORT.md`: consolidated project report
 
 ## License
 

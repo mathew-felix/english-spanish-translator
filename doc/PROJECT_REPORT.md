@@ -4,13 +4,14 @@ Updated: 2026-04-09
 
 ## Snapshot
 
-This repository now contains a working English-to-Spanish translation project built around a custom Transformer implemented from scratch in PyTorch.
+This repository contains an English-to-Spanish translation project built around a custom Transformer implemented from scratch in PyTorch.
 
-The project is now intentionally narrow in presentation:
+Current scope:
 
-- it is a custom ML translation system first
-- it uses retrieval and GPT as a revision step for institutional language
-- it is not positioned as a general-purpose language helper
+- custom translation model and training pipeline
+- API and Docker packaging for inference
+- baseline comparison against MarianMT
+- translation memory and revision step for institutional language
 
 What is currently implemented:
 
@@ -26,10 +27,6 @@ What is currently implemented:
 - ChromaDB RAG translation memory
 - Swagger UI screenshot and API documentation
 
-What is not implemented yet:
-
-- `CURRENT_PROJECT_STATUS.md`
-
 ## Implemented Components
 
 | Area | Current state |
@@ -43,7 +40,6 @@ What is not implemented yet:
 | Evaluation | `source/Evaluate.py` computes corpus BLEU with `sacrebleu` |
 | Inference | `source/inference.py` loads the model once and exposes `translate(text)` |
 | API | `serve.py` exposes `/health` and `/translate` with FastAPI |
-| Colab | `colab_training.ipynb` supports setup, training, evaluation, and artifact export |
 | Docker | `Dockerfile` and `docker-compose.yml` run the API in a container |
 | Agent | `agent/` contains the LangGraph routing layer and tool runner |
 | RAG | `rag/` contains the ChromaDB translation-memory builder and retriever |
@@ -76,22 +72,7 @@ What is not implemented yet:
 | `rag/retriever.py` | lazy-loaded retrieval over the translation memory |
 | `finetune/baseline_hf.py` | Hugging Face comparison runner |
 | `finetune/manual_comparison_test_set.csv` | hand-written 50-row comparison benchmark |
-| `finetune/custom_model_results_manual.json` | custom-model outputs on the manual benchmark |
-| `finetune/baseline_results_manual.json` | MarianMT outputs on the manual benchmark |
-| `colab_training.ipynb` | Colab run notebook |
 | `assets/swagger_demo.png` | FastAPI Swagger screenshot |
-
-### Reports
-
-| Path | Purpose |
-| --- | --- |
-| `doc/PROJECT_REPORT.md` | project-wide status |
-| `doc/PROJECT_FASTAPI_REPORT.md` | FastAPI phase report |
-| `doc/PROJECT_AGENT_REPORT.md` | LangGraph agent report |
-| `doc/PROJECT_RAG_REPORT.md` | RAG translation-memory report |
-| `doc/TRAINING_REPORT.md` | completed training run report |
-| `doc/HF_COMPARISON_REPORT.md` | MarianMT baseline comparison report |
-| `doc/MODEL_SPOTCHECK_REPORT.md` | exported checkpoint spot-check results |
 
 ## Data Pipeline
 
@@ -116,7 +97,7 @@ The current code downloads and preprocesses:
 
 ## Latest Verified Training Run
 
-The latest full verified run is the Colab run captured in `output.txt`.
+The latest full verified run completed in Colab with the settings and results listed below.
 
 ### Run configuration
 
@@ -148,7 +129,7 @@ Split used in the run:
 
 ### Training outcome
 
-Key verified metrics from `output.txt`:
+Key verified metrics from the completed run:
 
 - epoch 1 validation loss: `4.2375`
 - epoch 15 validation loss: `2.6032`
@@ -163,7 +144,7 @@ W&B run:
 
 Important note:
 
-- the trailing three console example lines at the very bottom of `output.txt` were identified by the user as stale output from a previous run and are not part of the verified results for this training run
+- the trailing three console example lines at the very bottom of the original Colab console log were identified by the user as stale output from a previous run and are not part of the verified results for this training run
 
 ## API Layer
 
@@ -214,9 +195,9 @@ Verified local result:
 
 This means the translation API can now be started from a clean container build instead of depending on the local Python environment.
 
-## Focused Application Layer
+## Institutional Translation Path
 
-The project is now centered on one application flow:
+The repository includes a second translation path for institutional text:
 
 - institutional English sentence in
 - custom model creates the first Spanish draft
@@ -240,19 +221,19 @@ Verified structured result:
 }
 ```
 
-When this flow should be used:
+Use this path for:
 
 - parliamentary wording
 - committee and council language
 - amendments, motions, and other institutional text
 
-When it should not be oversold:
+Do not use this path as the default for:
 
 - general everyday translation
 - casual conversation
 - broad consumer translation quality claims
 
-## Review Path Implementation
+## Revision Path Implementation
 
 The repository now includes both:
 
@@ -283,13 +264,7 @@ Custom model draft: Se suspendió la sesión parlamentaria.
 Translation: Se interrumpe la sesión parlamentaria.
 ```
 
-This is the key architectural improvement because it creates a real dependency between the custom model and GPT instead of treating them as unrelated features.
-
-Important positioning note:
-
-- LangGraph is an implementation detail here
-- the project value is not “I used LangGraph”
-- the project value is “I built a revision path on top of my own trained model”
+This creates a dependency between the custom model draft and the GPT revision step instead of running them as separate features.
 
 ## Hugging Face Comparison Layer
 
@@ -299,8 +274,8 @@ Comparison artifacts:
 
 - `finetune/baseline_hf.py`
 - `finetune/manual_comparison_test_set.csv`
-- `finetune/custom_model_results_manual.json`
-- `finetune/baseline_results_manual.json`
+
+The generated comparison result files are kept locally and are not part of the public repo.
 
 Verified comparison setup:
 
@@ -339,9 +314,9 @@ The training pipeline currently uses `bert-base-multilingual-cased` with:
 - `<SOS>`
 - `<END>`
 
-## Project Strengths
+## Project Status
 
-What is genuinely strong in the current project:
+Currently verified:
 
 - end-to-end custom model training pipeline works
 - large multi-corpus preprocessing pipeline works
@@ -359,33 +334,24 @@ What is genuinely strong in the current project:
 
 ## Remaining Gaps
 
-The project is functional, but several planned layers are still missing:
+The project is functional, but several practical gaps remain:
 
-- a cleaned, fully current `CURRENT_PROJECT_STATUS.md`
-- a true production deployment story
+- a full production deployment setup
 - broader human evaluation beyond corpus BLEU
 
 ## Bottom Line
 
-This project has moved beyond a simple training script. It is now a working ML systems project with:
+This project currently includes:
 
 - a custom Transformer
 - a real multi-corpus training run
 - verified W&B tracking
 - a FastAPI inference layer
 - Docker packaging
-- a focused institutional review path
+- a focused institutional translation path
 - a ChromaDB translation memory
 - Colab-based reproducible training
 
-The strongest honest description is:
+Current short description:
 
-> a custom English-to-Spanish translation model with a domain-aware revision path for institutional language
-
-The weakest description would be:
-
-> an all-purpose translation product
-
-The strongest current claim is:
-
-> a custom English-to-Spanish Transformer system trained end to end on a large OPUS corpus mix, evaluated at `31.41 sacreBLEU`, tracked in W&B, and served through FastAPI
+> a custom English-to-Spanish Transformer system trained end to end on a large OPUS corpus mix, evaluated at `31.41 sacreBLEU`, served through FastAPI, and extended with a translation-memory-based revision path for institutional language
