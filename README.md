@@ -93,9 +93,9 @@ The completed 30-epoch run showed stable training and steady validation improvem
 - epoch 29 validation loss: `2.5055`
 - final full-test sacreBLEU: `31.41`
 
-BLEU score distribution from the full evaluation run:
+Per-sentence BLEU score distribution from the full held-out evaluation run on `878,564` test pairs:
 
-![BLEU Score Distribution](bleu_score_distribution.png)
+![Per-sentence BLEU score distribution from the full held-out evaluation run](bleu_score_distribution.png)
 
 Late-epoch qualitative samples from the training log:
 
@@ -104,6 +104,66 @@ Late-epoch qualitative samples from the training log:
 - `I need help with my homework. -> Necesito ayuda con mis deberes.`
 
 Detailed run analysis is in `doc/TRAINING_REPORT.md`.
+
+## Hugging Face Comparison
+
+The repo now includes a direct comparison against the pretrained Hugging Face baseline `Helsinki-NLP/opus-mt-en-es`.
+
+The preferred benchmark is now a clean hand-written 50-sentence set. This replaces the earlier dataset-derived comparison as the main reference because some corpus test rows were noisy or misaligned.
+
+Artifacts:
+
+- `finetune/baseline_hf.py`
+- `finetune/manual_comparison_test_set.csv`
+- `finetune/custom_model_results_manual.json`
+- `finetune/baseline_results_manual.json`
+
+Command used:
+
+```bash
+venv/bin/python finetune/baseline_hf.py \
+  --csv-path finetune/manual_comparison_test_set.csv \
+  --limit 50 \
+  --custom-output custom_model_results_manual.json \
+  --baseline-output baseline_results_manual.json
+```
+
+Manual comparison set:
+
+- `5` Daily
+- `5` Travel
+- `5` Health
+- `5` Work
+- `5` Education
+- `5` Emergency
+- `5` Shopping
+- `5` Social
+- `5` Technology
+- `5` Home
+
+What the manual 50-sentence comparison showed on the local CPU run:
+
+- MarianMT was stronger overall on fluency and lexical accuracy
+- the custom Transformer still produced valid Spanish on many short and medium everyday prompts
+- average latency was `6518.67 ms` for the custom model vs `470.43 ms` for MarianMT on this CPU run
+- exact reference matches were `11 / 50` for the custom model vs `20 / 50` for MarianMT
+- the biggest custom-model errors showed up on technology, shopping, and household phrasing
+- the main quality gap is still best explained by pretrained data scale and model maturity, not by the impossibility of the basic encoder-decoder architecture itself
+
+Ten real side-by-side examples from the manual comparison set:
+
+| English | Custom Transformer | Helsinki MarianMT |
+| --- | --- | --- |
+| Good morning, did you sleep well? | Buenos días, ¿durmió bien? | Buenos días, ¿durmieron bien? |
+| Where can I buy a train ticket to Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? |
+| I have had a headache since early this morning. | Tengo dolor de cabeza desde esta mañana. | He tenido dolor de cabeza desde temprano esta mañana. |
+| The professor explained the problem step by step. | El profesor explicó el problema paso a paso. | El profesor explicó el problema paso a paso. |
+| We need an ambulance right away. | Necesitamos una ambulancia enseguida. | Necesitamos una ambulancia de inmediato. |
+| Can I pay by card, or do you only accept cash? | ¿Puedo pagar con tarjeta o sólo aceptar dinero? | ¿Puedo pagar con tarjeta, o solo aceptas efectivo? |
+| We laughed so hard that we cried. | Nos reímos tanto que lloramos. | Nos reímos tanto que lloramos. |
+| Did you remember to back up the files? | ¿Recuerdas retrasar los archivos? | ¿Te acordaste de hacer copias de seguridad de los archivos? |
+| I need to reset my password again. | Necesito reanudar mi contraseña otra vez. | Necesito restablecer mi contraseña de nuevo. |
+| The washing machine stopped working this morning. | La lavadora dejó de trabajar esta mañana. | La lavadora dejó de funcionar esta mañana. |
 
 ## API
 
@@ -161,6 +221,7 @@ Latest verified run:
 - `doc/PROJECT_REPORT.md`: current project-wide status
 - `doc/PROJECT_FASTAPI_REPORT.md`: FastAPI inference layer report
 - `doc/TRAINING_REPORT.md`: completed training run report
+- `doc/HF_COMPARISON_REPORT.md`: Hugging Face baseline comparison report
 - `doc/MODEL_SPOTCHECK_REPORT.md`: exported checkpoint spot-check results
 
 ## License
