@@ -3,7 +3,6 @@ Each tool returns plain text so ToolNode can feed results back into the graph.
 """
 
 import os
-import re
 from typing import Optional
 
 import requests
@@ -88,57 +87,85 @@ def _format_retrieved_context(retrieved_pairs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _offline_grammar_response(question: str) -> str:
-    """Provide a small offline fallback for common grammar prompts.
-    This keeps `agent/run.py` runnable without an OpenAI API key.
+def _parse_revision_response(response_text: str, draft_translation: str) -> tuple[str, str]:
+    """Parse the GPT review response into a decision and final translation.
+    Falls back to the custom-model draft when the response format is incomplete.
     """
-    lowered = question.lower()
-    if "ser" in lowered and "estar" in lowered:
-        return (
-            "Spanish uses 'ser' for identity, origin, and lasting characteristics, "
-            "while 'estar' is used for temporary states, conditions, and locations."
-        )
-    return (
-        "Grammar explanations require OPENAI_API_KEY for full detail. "
-        "The routing worked, but the repo is currently in offline fallback mode."
+    cleaned_response = response_text.strip()
+    if cleaned_response.startswith("```"):
+        cleaned_lines = [
+            line
+            for line in cleaned_response.splitlines()
+            if not line.strip().startswith("```")
+        ]
+        cleaned_response = "\n".join(cleaned_lines).strip()
+
+    decision = ""
+    final_translation = ""
+    for line in cleaned_response.splitlines():
+        stripped_line = line.strip()
+        lowered_line = stripped_line.lower()
+        if lowered_line.startswith("decision:"):
+            decision = stripped_line.split(":", 1)[1].strip().upper()
+        elif lowered_line.startswith("translation:"):
+            final_translation = stripped_line.split(":", 1)[1].strip()
+
+    if not final_translation:
+        final_translation = draft_translation
+    if decision not in {"KEEP", "EDIT"}:
+        decision = "KEEP" if final_translation == draft_translation else "EDIT"
+    return decision, final_translation
+
+
+def _review_translation_with_context(
+    text: str,
+    draft_translation: str,
+    formatted_context: str,
+) -> tuple[str, str]:
+    """Review a custom-model draft with GPT-4o-mini and retrieved memory context.
+    The fallback path keeps the draft unchanged when no OpenAI key is configured.
+    """
+    system_prompt = (
+        "You review a custom English-to-Spanish machine translation draft for "
+        "parliamentary and institutional text. Use the retrieved bilingual examples "
+        "to preserve terminology. If the draft is already correct and consistent, "
+        "keep it. Otherwise make the smallest necessary edit. Return exactly two "
+        "lines in this format:\n"
+        "DECISION: KEEP or EDIT\n"
+        "TRANSLATION: <final Spanish translation>"
+    )
+    user_prompt = (
+        f"English source: {text}\n"
+        f"Custom model draft: {draft_translation}\n\n"
+        f"Retrieved translation memory:\n{formatted_context}"
     )
 
+    response_text = _chat_with_openai(system_prompt, user_prompt)
+    if not response_text:
+        return "KEEP (offline fallback)", draft_translation
+    return _parse_revision_response(response_text, draft_translation)
 
-def _extract_spanish_word(question: str) -> str:
-    """Extract a likely Spanish target word from a vocabulary question.
-    Falls back to the raw question when no quoted or isolated word is found.
+
+def build_rag_translation_review(text: str) -> dict:
+    """Build a structured institutional-translation review result.
+    The custom model drafts first, then retrieval and GPT review refine that draft.
     """
-    quoted_match = re.search(r"['\"]([^'\"]+)['\"]", question)
-    if quoted_match:
-        return quoted_match.group(1).strip().lower()
-
-    word_match = re.search(
-        r"\bwhat does\s+([a-záéíóúñü]+)\s+mean\b",
-        question.lower(),
+    draft_translation = translate_with_custom_model.invoke({"text": text})
+    retrieved_pairs = retrieve_similar_translations(text, k=3)
+    formatted_context = _format_retrieved_context(retrieved_pairs)
+    decision, final_translation = _review_translation_with_context(
+        text=text,
+        draft_translation=draft_translation,
+        formatted_context=formatted_context,
     )
-    if word_match:
-        return word_match.group(1).strip().lower()
-
-    return question.strip().lower()
-
-
-def _offline_word_info_response(question: str) -> str:
-    """Provide a small offline fallback for common vocabulary prompts.
-    This avoids blocking the routing test when no OpenAI key is configured.
-    """
-    glossary = {
-        "biblioteca": (
-            "'biblioteca' means 'library' in English. "
-            "It is a feminine noun in Spanish: 'la biblioteca'."
-        ),
+    return {
+        "input": text,
+        "draft_translation": draft_translation,
+        "decision": decision,
+        "final_translation": final_translation,
+        "retrieved_pairs": retrieved_pairs,
+        "formatted_context": formatted_context,
     }
-    word = _extract_spanish_word(question)
-    if word in glossary:
-        return glossary[word]
-    return (
-        "Vocabulary explanations require OPENAI_API_KEY for full detail. "
-        "The routing worked, but the repo is currently in offline fallback mode."
-    )
 
 
 @tool
@@ -167,66 +194,21 @@ def translate_with_custom_model(text: str) -> str:
 
 
 @tool
-def explain_spanish_grammar(question: str) -> str:
-    """Explain a Spanish grammar concept with GPT-4o-mini.
-    Falls back to a deterministic offline answer when no API key is configured.
-    """
-    system_prompt = (
-        "You explain Spanish grammar clearly and concisely for learners. "
-        "Answer in 3 to 5 sentences with one concrete example."
-    )
-    response_text = _chat_with_openai(system_prompt, question)
-    if response_text:
-        return response_text
-    return _offline_grammar_response(question)
-
-
-@tool
-def get_spanish_word_info(question: str) -> str:
-    """Explain the meaning and usage of a Spanish word with GPT-4o-mini.
-    Falls back to a small built-in glossary when no API key is configured.
-    """
-    system_prompt = (
-        "You explain Spanish vocabulary clearly for English speakers. "
-        "Give the English meaning, part of speech, and a short example sentence."
-    )
-    response_text = _chat_with_openai(system_prompt, question)
-    if response_text:
-        return response_text
-    return _offline_word_info_response(question)
-
-
-@tool
 def rag_translate(text: str) -> str:
     """Translate with translation-memory context retrieved from ChromaDB.
     Retrieved bilingual examples are included in the tool output for traceability.
     """
-    retrieved_pairs = retrieve_similar_translations(text, k=3)
-    formatted_context = _format_retrieved_context(retrieved_pairs)
-
-    system_prompt = (
-        "You translate English into Spanish for parliamentary and institutional text. "
-        "Use the retrieved bilingual examples to keep terminology consistent. "
-        "Return only the final Spanish translation."
-    )
-    user_prompt = (
-        f"English text: {text}\n\n"
-        f"Retrieved translation memory:\n{formatted_context}"
-    )
-    response_text = _chat_with_openai(system_prompt, user_prompt)
-
-    if not response_text:
-        response_text = translate_with_custom_model.invoke({"text": text})
+    review_result = build_rag_translation_review(text)
 
     return (
-        f"Translation: {response_text}\n"
-        f"Retrieved context:\n{formatted_context}"
+        f"Decision: {review_result['decision']}\n"
+        f"Custom model draft: {review_result['draft_translation']}\n"
+        f"Translation: {review_result['final_translation']}\n"
+        f"Retrieved context:\n{review_result['formatted_context']}"
     )
 
 
 TOOLS = [
     translate_with_custom_model,
     rag_translate,
-    explain_spanish_grammar,
-    get_spanish_word_info,
 ]
