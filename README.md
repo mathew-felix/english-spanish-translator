@@ -1,95 +1,164 @@
-# English-to-Spanish Translator using Transformer
+# English-to-Spanish Translator
 
-This project implements an English-to-Spanish translator using the Transformer architecture. The model processes bilingual datasets to translate English sentences into Spanish. The Transformer leverages self-attention and cross-attention mechanisms for contextual understanding and accurate translation.
+[![Weights & Biases](https://img.shields.io/badge/W%26B-Latest%20Run-FFBE00?logo=weightsandbiases&logoColor=black)](https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti)
 
----
+This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. The repository now includes the full training pipeline, evaluation, Weights & Biases tracking, a Colab training notebook, and a FastAPI inference layer.
+
+## Latest Verified Run
+
+The latest full end-to-end training run was completed in Colab and captured in `output.txt`.
+
+| Item | Value |
+| --- | --- |
+| Hardware | NVIDIA RTX PRO 6000 Blackwell Server Edition |
+| Epochs | 30 |
+| Batch size | 640 |
+| Max sequence length | 60 |
+| Learning rate | `4.5e-4` |
+| Train split | 3,512,826 pairs |
+| Test split | 878,564 pairs |
+| Best validation loss | `2.5055` at epoch 29 |
+| Final test sacreBLEU | `31.41` |
+| W&B run | `acxn0hti` (`silvery-galaxy-1`) |
+| Full evaluation time | `2:33:37` |
+
+Run links:
+
+- Project: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator
+- Latest run: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
 ## Features
-- Preprocessing large bilingual datasets with efficient data cleaning and normalization.
-- Training a Transformer-based encoder-decoder model for sequence-to-sequence translation.
-- Evaluation using the BLEU metric for translation quality.
-- Pretrained BERT tokenizer for text processing and vocabulary mapping.
-- Achieved a BLEU score of **0.47**, with a **42% improvement** over baseline metrics.
 
----
+- Custom encoder-decoder Transformer implemented from scratch in PyTorch
+- OPUS English-Spanish corpus mix: `Europarl + News-Commentary + TED2020 + filtered OpenSubtitles`
+- Tokenization with `bert-base-multilingual-cased` plus custom special tokens
+- Training with AMP, warmup scheduling, label smoothing, gradient clipping, and W&B logging
+- Corpus-level evaluation with `sacrebleu`
+- Colab notebook for GPU training and Google Drive artifact export
+- FastAPI inference endpoint with `/health`, `/translate`, and Swagger docs
 
-## Technologies Used
-### **Programming Language**
-- Python
+## Tech Stack
 
-### **Libraries and Frameworks**
+- Python 3.12
 - PyTorch
-- Hugging Face BERT Tokenizer
-- Pandas, NumPy
-- NLTK for BLEU score computation
-- Matplotlib for visualization
-- tqdm for monitoring training progress
-
-### **Hardware**
-- NVIDIA GPU with CUDA support for accelerated training
+- Hugging Face `transformers`
+- FastAPI
+- Pydantic v2
+- Weights & Biases
+- pandas / NumPy / matplotlib / tqdm / sacrebleu
 
 ## Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-repo/english-spanish-translator.git
-   cd english-spanish-translator
 
-2. Set up a virtual environment:
-    ```bash
-    python -m venv venv
-    venv\Scripts\activate 
-    pip install -r requirements
+```bash
+git clone https://github.com/mathew-felix/english-spanish-translator.git
+cd english-spanish-translator
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-## Usage
-    ```bash
-    python run.py --step download       
-    python run.py --step preprocess     
-    python run.py --step train          
-    python run.py --step evaluate       
+## Pipeline Usage
 
-## Configuration
-    Modify Config.py to adjust hyperparameters such as:
-        1. Learning rate
-        2. Batch size
-        3. Number of epochs
-        4. Maximum sequence length 
+```bash
+python run.py --step download
+python run.py --step preprocess
+python run.py --step train
+python run.py --step evaluate
+```
 
-## Results
-    BLEU Score: 0.47
-    Validation Loss: 2.09 after 10 epochs
-    Dataset Size: 1.9M rows (1.5M training, 0.4M testing)
+## Dataset Summary
 
-## Testing English-to-Spanish Translation:
-    --------------------------------------------------
-    Test 1:
-    English Sentence: How are you?
-    Expected Translation: ¿Cómo estás?
-    Observed Translation: como es usted?
-    --------------------------------------------------
-    Test 2:
-    English Sentence: What is your name?
-    Expected Translation: ¿Cuál es tu nombre?
-    Observed Translation: que nombre tiene?
-    --------------------------------------------------
-    Test 3:
-    English Sentence: Where is the nearest hospital?
-    Expected Translation: ¿Dónde está el hospital más cercano?
-    Observed Translation: donde esta el hospital mas cercano?
-    --------------------------------------------------
-    Test 4:
-    English Sentence: I need help with my homework.
-    Expected Translation: Necesito ayuda con mi tarea.
-    Observed Translation: necesito ayudar con mis deberes.
-    --------------------------------------------------
-    Test 5:
-    English Sentence: Can you tell me the time?
-    Expected Translation: ¿Puedes decirme la hora?
-    Observed Translation: puede decirme el momento?
+The completed OPUS preprocessing run kept:
 
-## Insights
-    Translation Errors: Some translations have correct meaning but use awkward phrasing (e.g., "How are you?" as "¿Cómo está usted?" instead of "¿Cómo estás?").
-    Limited Dataset: The dataset lacks enough examples of idioms and specialized language, reducing accuracy in unique cases.
-    Slow Validation Improvement: Validation loss stopped improving significantly after 8 epochs, showing potential overfitting.
-    
+- `Europarl`: 1,940,734 pairs
+- `News-Commentary`: 46,904 pairs
+- `TED2020`: 403,752 pairs
+- `OpenSubtitles`: 2,000,000 pairs
+
+Total merged dataset:
+
+- `4,391,390` aligned sentence pairs
+
+Train/test split from the verified run:
+
+- `3,512,826` train
+- `878,564` test
+
+## Training Results
+
+The completed 30-epoch run showed stable training and steady validation improvement:
+
+- epoch 1 validation loss: `4.2375`
+- epoch 15 validation loss: `2.6032`
+- epoch 29 validation loss: `2.5055`
+- final full-test sacreBLEU: `31.41`
+
+Late-epoch qualitative samples from the training log:
+
+- `How are you? -> ¿Cómo estás?`
+- `Where is the hospital? -> ¿Dónde está el hospital?`
+- `I need help with my homework. -> Necesito ayuda con mis deberes.`
+
+Detailed run analysis is in `doc/TRAINING_REPORT.md`.
+
+## API
+
+Run the FastAPI server locally:
+
+```bash
+uvicorn serve:app --reload
+```
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Translation request:
+
+```bash
+curl -X POST http://localhost:8000/translate \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Where is the nearest hospital?"}'
+```
+
+Observed local response from the current checkpoint:
+
+```json
+{
+  "input": "Where is the nearest hospital?",
+  "translation": "¿Dónde está el hospital más cercano?",
+  "latency_ms": 21467.58
+}
+```
+
+The exact latency depends on local hardware. The response above is from the latest local verification run on CPU.
+
+Swagger UI screenshot:
+
+![Swagger UI](assets/swagger_demo.png)
+
+## Weights & Biases
+
+Set your API key before training if you want online tracking:
+
+```bash
+export WANDB_API_KEY=your_api_key
+python run.py --step train
+```
+
+Latest verified run:
+
+- https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
+
+## Reports
+
+- `doc/PROJECT_REPORT.md`: current project-wide status
+- `doc/PROJECT_FASTAPI_REPORT.md`: FastAPI inference layer report
+- `doc/TRAINING_REPORT.md`: completed training run report
+- `doc/MODEL_SPOTCHECK_REPORT.md`: exported checkpoint spot-check results
+
 ## License
+
 This project is licensed under the MIT License.

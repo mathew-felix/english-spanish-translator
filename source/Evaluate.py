@@ -1,3 +1,4 @@
+import os
 import torch
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer
@@ -134,8 +135,48 @@ def load_model(config, model_path="best_model.pth"):
     return transformer
 
 
+def _resolve_model_path(config):
+    """
+    Resolve the checkpoint path used for evaluation.
+    Falls back to the weights directory when the root path is absent.
+    """
+    candidates = [
+        config.model_save_path,
+        os.path.join("weights", os.path.basename(config.model_save_path)),
+    ]
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(
+        f"Model checkpoint not found. Checked: {', '.join(candidates)}"
+    )
+
+
+def _apply_checkpoint_config(config, checkpoint):
+    """
+    Overlay saved checkpoint settings onto the runtime config.
+    Device is recomputed locally instead of restored from the checkpoint.
+    """
+    checkpoint_config = checkpoint.get("config", {}) if isinstance(checkpoint, dict) else {}
+    for key, value in checkpoint_config.items():
+        if hasattr(config, key) and key != "device":
+            setattr(config, key, value)
+    return config
+
+
 def evaluate():
     config = Config()
+    model_path = _resolve_model_path(config)
+    checkpoint = torch.load(
+        model_path,
+        map_location=torch.device("cpu"),
+        weights_only=False,
+    )
+    config = _apply_checkpoint_config(config, checkpoint)
+    config.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    config.model_save_path = model_path
 
     print("Initialising tokenizer...")
     tokenizer = BertTokenizer.from_pretrained(config.tokenizer_path)
