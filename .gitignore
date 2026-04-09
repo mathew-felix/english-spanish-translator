@@ -3,5 +3,7 @@ data/
 .idea/
 runs/
 source/__pycache__
+rag/chroma_db/
+rag/_tmp_probe_db/
 best_model.pth
 .env
