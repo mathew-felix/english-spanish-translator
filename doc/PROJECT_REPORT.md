@@ -14,6 +14,7 @@ What is currently implemented:
 - training loop with W&B tracking
 - Colab training notebook
 - FastAPI inference endpoint
+- Hugging Face baseline comparison against MarianMT
 - Swagger UI screenshot and API documentation
 
 What is not implemented yet:
@@ -21,7 +22,6 @@ What is not implemented yet:
 - Docker packaging
 - LangGraph agent layer
 - ChromaDB RAG layer
-- Hugging Face baseline comparison scripts
 - `CURRENT_PROJECT_STATUS.md`
 
 ## Implemented Components
@@ -55,6 +55,10 @@ What is not implemented yet:
 | `source/Train.py` | training loop and W&B logging |
 | `source/Evaluate.py` | checkpoint-aware full test-set evaluation |
 | `source/inference.py` | checkpoint-aware inference singleton |
+| `finetune/baseline_hf.py` | Hugging Face comparison runner |
+| `finetune/manual_comparison_test_set.csv` | hand-written 50-row comparison benchmark |
+| `finetune/custom_model_results_manual.json` | custom-model outputs on the manual benchmark |
+| `finetune/baseline_results_manual.json` | MarianMT outputs on the manual benchmark |
 | `colab_training.ipynb` | Colab workflow |
 | `assets/swagger_demo.png` | FastAPI Swagger screenshot |
 
@@ -65,6 +69,7 @@ What is not implemented yet:
 | `doc/PROJECT_REPORT.md` | project-wide status |
 | `doc/PROJECT_FASTAPI_REPORT.md` | FastAPI phase report |
 | `doc/TRAINING_REPORT.md` | completed training run report |
+| `doc/HF_COMPARISON_REPORT.md` | MarianMT baseline comparison report |
 | `doc/MODEL_SPOTCHECK_REPORT.md` | exported checkpoint spot-check results |
 
 ## Data Pipeline
@@ -168,6 +173,33 @@ Observed local translation response:
 
 The exact latency is local-runtime dependent. This response was re-verified on 2026-04-09 after restoring the exported Colab artifacts into the project paths used by `Config`.
 
+## Hugging Face Comparison Layer
+
+The repository now includes a baseline comparison against `Helsinki-NLP/opus-mt-en-es`.
+
+Comparison artifacts:
+
+- `finetune/baseline_hf.py`
+- `finetune/manual_comparison_test_set.csv`
+- `finetune/custom_model_results_manual.json`
+- `finetune/baseline_results_manual.json`
+
+Verified comparison setup:
+
+- hand-written 50-row benchmark with clean English/Spanish references
+- ten everyday domains with five rows each
+- same references for both outputs
+- custom model translated through the local inference runtime
+- MarianMT translated through the pretrained Hugging Face model
+
+Observed local CPU comparison summary:
+
+- custom average latency: `6518.67 ms`
+- MarianMT average latency: `470.43 ms`
+- exact reference matches: `11 / 50` for the custom model vs `20 / 50` for MarianMT
+- MarianMT was stronger overall on fluency and lexical accuracy
+- the custom Transformer still produced grammatically valid Spanish on many everyday rows
+
 ## Model Status
 
 The core model remains a genuine custom Transformer, not `torch.nn.Transformer`.
@@ -198,6 +230,7 @@ What is genuinely strong in the current project:
 - W&B experiment tracking works
 - full evaluation works
 - FastAPI serving works
+- MarianMT comparison artifacts now exist for interview discussion
 - exported Colab artifacts can now be reloaded locally for evaluation and serving
 - Colab workflow works on high-memory GPU hardware
 
@@ -208,7 +241,6 @@ The project is functional, but several planned layers are still missing:
 - Docker / container deployment
 - LangGraph orchestration
 - RAG translation memory
-- Hugging Face baseline comparison
 
 Also still missing:
 
