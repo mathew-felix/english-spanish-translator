@@ -93,6 +93,10 @@ The completed 30-epoch run showed stable training and steady validation improvem
 - epoch 29 validation loss: `2.5055`
 - final full-test sacreBLEU: `31.41`
 
+BLEU score distribution from the full evaluation run:
+
+![BLEU Score Distribution](bleu_score_distribution.png)
+
 Late-epoch qualitative samples from the training log:
 
 - `How are you? -> ¿Cómo estás?`
