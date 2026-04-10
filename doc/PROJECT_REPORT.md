@@ -1,103 +1,44 @@
 # Project Report
 
-Updated: 2026-04-09
+Updated: 2026-04-10
 
 ## Snapshot
 
-This repository contains an English-to-Spanish translation project built around a custom Transformer implemented from scratch in PyTorch.
+This repository contains an English-to-Spanish translation system built around a custom Transformer written from scratch in PyTorch. The main work covers dataset preparation, model training, evaluation, and comparison against a MarianMT baseline. The same repository also includes FastAPI serving, Docker packaging, and a second translation path for institutional text that uses retrieved Europarl examples and a GPT revision step.
 
-Current scope:
-
-- custom translation model and training pipeline
-- API and Docker packaging for inference
-- baseline comparison against MarianMT
-- translation memory and revision step for institutional language
-
-What is currently implemented:
+## Implemented Scope
 
 - CLI pipeline for download, preprocessing, training, and evaluation
 - OPUS-based English-Spanish dataset pipeline
-- custom Transformer model
-- training loop with W&B tracking
+- custom Transformer model in `source/Model.py`
+- training loop with Weights & Biases tracking
 - Colab training notebook
-- FastAPI inference endpoint
-- Hugging Face baseline comparison against MarianMT
-- Docker packaging
-- LangGraph routing layer
-- ChromaDB RAG translation memory
-- Swagger UI screenshot and API documentation
-
-## Implemented Components
-
-| Area | Current state |
-| --- | --- |
-| CLI | `run.py` supports `--step download|preprocess|train|evaluate` |
-| Data download | `source/DatasetDownload.py` downloads OPUS corpora |
-| Preprocessing | `source/DatasetPreprocessing.py` merges and filters multi-corpus data |
-| Dataset class | `source/DatasetTranslation.py` builds encoder/decoder/target tensors |
-| Model | `source/Model.py` contains the custom Transformer |
-| Training | `source/Train.py` trains, logs to W&B, and saves checkpoints |
-| Evaluation | `source/Evaluate.py` computes corpus BLEU with `sacrebleu` |
-| Inference | `source/inference.py` loads the model once and exposes `translate(text)` |
-| API | `serve.py` exposes `/health` and `/translate` with FastAPI |
-| Docker | `Dockerfile` and `docker-compose.yml` run the API in a container |
-| Agent | `agent/` contains the LangGraph routing layer and tool runner |
-| RAG | `rag/` contains the ChromaDB translation-memory builder and retriever |
-
-## Current File Inventory
-
-### Core project files
-
-| Path | Purpose |
-| --- | --- |
-| `run.py` | CLI entrypoint |
-| `serve.py` | FastAPI application |
-| `source/Config.py` | central hyperparameters and paths |
-| `source/DatasetDownload.py` | OPUS corpus download |
-| `source/DatasetPreprocessing.py` | corpus merge, filtering, inspection, splitting |
-| `source/DatasetTranslation.py` | PyTorch translation dataset |
-| `source/Model.py` | custom Transformer implementation |
-| `source/Train.py` | training loop and W&B logging |
-| `source/Evaluate.py` | checkpoint-aware full test-set evaluation |
-| `source/inference.py` | checkpoint-aware inference singleton |
-| `templates/index.html` | browser UI for the institutional review process |
-| `assets/ui.js` | step-by-step institutional review frontend logic |
-| `assets/ui.css` | styling for the institutional review page |
-| `Dockerfile` | container build for the FastAPI service |
-| `docker-compose.yml` | local multi-file container launch for the API |
-| `agent/graph.py` | LangGraph agent loop and conditional routing |
-| `agent/tools.py` | direct translation and RAG review tools |
-| `agent/run.py` | local routing smoke test |
-| `rag/build_index.py` | builds the persistent Chroma translation memory |
-| `rag/retriever.py` | lazy-loaded retrieval over the translation memory |
-| `finetune/baseline_hf.py` | Hugging Face comparison runner |
-| `finetune/manual_comparison_test_set.csv` | hand-written 50-row comparison benchmark |
-| `assets/swagger_demo.png` | FastAPI Swagger screenshot |
+- FastAPI endpoints for direct translation and institutional review
+- Docker packaging for the API
+- MarianMT comparison runner in `finetune/baseline_hf.py`
+- translation memory over `50K` Europarl pairs with ChromaDB
+- institutional translation flow and browser demo
 
 ## Data Pipeline
 
-The dataset pipeline has moved away from the earlier Kaggle-only Europarl approach.
+The completed preprocessing run merged four corpora:
 
-The current code downloads and preprocesses:
+| Corpus | Kept pairs |
+| --- | --- |
+| Europarl | 1,940,734 |
+| News-Commentary | 46,904 |
+| TED2020 | 403,752 |
+| OpenSubtitles | 2,000,000 |
+| Total | 4,391,390 |
 
-- `Europarl`
-- `News-Commentary`
-- `TED2020`
-- `OpenSubtitles`
+Train/test split used in the completed run:
 
-`source/DatasetPreprocessing.py` currently:
+- `3,512,826` train pairs
+- `878,564` test pairs
 
-- locates `.en` and `.es` files
-- normalizes punctuation and whitespace
-- preserves Spanish punctuation such as `¿` and `¡`
-- filters noisy subtitle data
-- de-duplicates bilingual pairs
-- writes a merged dataset
-- splits train and test files
+`source/DatasetPreprocessing.py` handles file discovery, text cleanup, duplicate removal, subtitle filtering, and train/test split generation.
 
-## Latest Verified Training Run
-
-The latest full verified run completed in Colab with the settings and results listed below.
+## Training Run
 
 ### Run configuration
 
@@ -112,24 +53,7 @@ The latest full verified run completed in Colab with the settings and results li
 | Warmup steps | 4000 |
 | Beam width | 4 |
 
-### Dataset sizes from the completed run
-
-| Corpus | Kept pairs |
-| --- | --- |
-| Europarl | 1,940,734 |
-| News-Commentary | 46,904 |
-| TED2020 | 403,752 |
-| OpenSubtitles | 2,000,000 |
-| Total | 4,391,390 |
-
-Split used in the run:
-
-- `3,512,826` train
-- `878,564` test
-
-### Training outcome
-
-Key verified metrics from the completed run:
+### Run results
 
 - epoch 1 validation loss: `4.2375`
 - epoch 15 validation loss: `2.6032`
@@ -142,30 +66,37 @@ W&B run:
 
 - https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
-Important note:
+Late-epoch console samples from the completed run:
 
-- the trailing three console example lines at the very bottom of the original Colab console log were identified by the user as stale output from a previous run and are not part of the verified results for this training run
+- `How are you? -> ¿Cómo estás?`
+- `Where is the hospital? -> ¿Dónde está el hospital?`
+- `I need help with my homework. -> Necesito ayuda con mis deberes.`
 
-## API Layer
+Run note:
 
-The FastAPI layer is implemented and verified locally.
+- the three trailing sample lines at the very bottom of the original Colab console log came from an earlier run and are not part of the results above
 
-Current endpoints:
+## Evaluation and Testing
+
+### BLEU evaluation
+
+The full held-out evaluation completed on `878,564` test pairs.
+
+- corpus metric: `31.41 sacreBLEU`
+- BLEU score distribution plot saved as `bleu_score_distribution.png`
+- training curve plot saved as `loss_plot.png`
+
+### FastAPI checks
+
+Local API checks were run on a MacBook M4 laptop. These timings are local CPU checks and should not be read as the training-time GPU performance.
+
+Endpoints checked:
 
 - `GET /health`
 - `POST /translate`
 - `POST /institutional-review`
 
-The API:
-
-- loads the model once at startup
-- uses checkpoint-aware config loading
-- retries with a narrower beam when wide-beam decoding returns empty output
-- validates input with Pydantic v2
-- returns translation text and `latency_ms`
-- exposes the structured institutional review flow for the browser UI
-
-Observed local translation response:
+Observed `/translate` response:
 
 ```json
 {
@@ -175,42 +106,48 @@ Observed local translation response:
 }
 ```
 
-The exact latency is local-runtime dependent. This response was re-verified on 2026-04-09 after restoring the exported Colab artifacts into the project paths used by `Config`.
+Observed `/institutional-review` response:
 
-## Docker Layer
+```json
+{
+  "input": "The parliamentary session was adjourned.",
+  "draft_translation": "Se suspendió la sesión parlamentaria.",
+  "decision": "EDIT",
+  "final_translation": "Se interrumpe la sesión parlamentaria.",
+  "retrieved_examples": [
+    {
+      "english": "The session is adjourned.",
+      "spanish": "Se interrumpe el periodo de sesiones.",
+      "distance": 0.177841
+    },
+    {
+      "english": "Adjournment of the session",
+      "spanish": "Interrupción del periodo de sesiones",
+      "distance": 0.225302
+    },
+    {
+      "english": "I declare adjourned the session of the European Parliament.",
+      "spanish": "Declaro interrumpido el período de sesiones del Parlamento Europeo.",
+      "distance": 0.298554
+    }
+  ],
+  "latency_ms": 10508.06
+}
+```
 
-Docker packaging is implemented and verified locally.
+### Docker checks
 
-Current files:
+Docker verification completed locally.
 
-- `Dockerfile`
-- `docker-compose.yml`
-- `.dockerignore`
+- `docker compose up --build` started the API
+- `GET /health` returned `{"status":"ok"}`
+- `POST /translate` returned the same translation path as the local FastAPI process
 
-Verified local result:
+### Institutional review checks
 
-- `docker compose up --build` starts the API successfully
-- `GET /health` returns `{"status":"ok"}`
-- `POST /translate` returns the same translation path as the local FastAPI process
+The institutional path uses the custom-model draft first, then retrieval, then a GPT revision step.
 
-This means the translation API can now be started from a clean container build instead of depending on the local Python environment.
-
-## Institutional Translation Path
-
-The repository includes a second translation path for institutional text:
-
-- institutional English sentence in
-- custom model creates the first Spanish draft
-- retrieval memory surfaces similar Europarl examples
-- GPT reviews the draft against those examples
-- final Spanish translation is returned
-
-This flow is available through:
-
-- the browser UI at `/`
-- the structured API endpoint `POST /institutional-review`
-
-Verified structured result:
+Structured result:
 
 ```json
 {
@@ -221,137 +158,47 @@ Verified structured result:
 }
 ```
 
-Use this path for:
+This path is intended for parliamentary and committee language. The direct `/translate` path remains the default for ordinary sentences.
 
-- parliamentary wording
-- committee and council language
-- amendments, motions, and other institutional text
+## MarianMT Comparison
 
-Do not use this path as the default for:
+The repository includes a comparison against `Helsinki-NLP/opus-mt-en-es` using a hand-written 50-sentence benchmark in `finetune/manual_comparison_test_set.csv`.
 
-- general everyday translation
-- casual conversation
-- broad consumer translation quality claims
+Comparison command:
 
-## Revision Path Implementation
-
-The repository now includes both:
-
-- a lightweight routing layer
-- a ChromaDB-based translation-memory layer
-
-The focused agent now exposes two tools:
-
-- `translate_with_custom_model`
-- `rag_translate`
-
-The graph structure remains:
-
-`START -> agent -> tools -> agent -> END`
-
-The most important verified hybrid behavior is now in `rag_translate`:
-
-- the custom model generates the first translation draft
-- ChromaDB retrieves the top 3 similar Europarl pairs
-- GPT-4o-mini reviews the draft against the retrieved context
-- GPT either keeps the draft or edits it
-
-Verified example after OpenAI billing was enabled:
-
-```text
-Decision: EDIT
-Custom model draft: Se suspendió la sesión parlamentaria.
-Translation: Se interrumpe la sesión parlamentaria.
+```bash
+venv/bin/python finetune/baseline_hf.py \
+  --csv-path finetune/manual_comparison_test_set.csv \
+  --limit 50 \
+  --custom-output custom_model_results_manual.json \
+  --baseline-output baseline_results_manual.json
 ```
 
-This creates a dependency between the custom model draft and the GPT revision step instead of running them as separate features.
+The generated JSON result files are kept locally.
 
-## Hugging Face Comparison Layer
+The local comparison run was also measured on a MacBook M4 laptop.
 
-The repository now includes a baseline comparison against `Helsinki-NLP/opus-mt-en-es`.
-
-Comparison artifacts:
-
-- `finetune/baseline_hf.py`
-- `finetune/manual_comparison_test_set.csv`
-
-The generated comparison result files are kept locally and are not part of the public repo.
-
-Verified comparison setup:
-
-- hand-written 50-row benchmark with clean English/Spanish references
-- ten everyday domains with five rows each
-- same references for both outputs
-- custom model translated through the local inference runtime
-- MarianMT translated through the pretrained Hugging Face model
-
-Observed local CPU comparison summary:
-
-- custom average latency: `6518.67 ms`
+- custom model average latency: `6518.67 ms`
 - MarianMT average latency: `470.43 ms`
-- exact reference matches: `11 / 50` for the custom model vs `20 / 50` for MarianMT
+- exact reference matches: `11 / 50` for the custom model
+- exact reference matches: `20 / 50` for MarianMT
 - MarianMT was stronger overall on fluency and lexical accuracy
-- the custom Transformer still produced grammatically valid Spanish on many everyday rows
 
-## Model Status
+Sample rows from the benchmark:
 
-The core model remains a genuine custom Transformer, not `torch.nn.Transformer`.
-
-Implemented model properties:
-
-- learned embeddings
-- sinusoidal positional encoding
-- encoder-decoder architecture
-- weight tying
-- causal masking
-- padding masks in attention
-- beam-search style generation
-
-The training pipeline currently uses `bert-base-multilingual-cased` with:
-
-- `<PAD>`
-- `<UNK>`
-- `<SOS>`
-- `<END>`
-
-## Project Status
-
-Currently verified:
-
-- end-to-end custom model training pipeline works
-- large multi-corpus preprocessing pipeline works
-- W&B experiment tracking works
-- full evaluation works
-- FastAPI serving works
-- Dockerized serving works
-- LangGraph routing works
-- ChromaDB retrieval works
-- GPT-backed draft review works on the RAG translation path
-- the browser demo now presents one coherent application instead of multiple unrelated side features
-- MarianMT comparison artifacts now exist for interview discussion
-- exported Colab artifacts can now be reloaded locally for evaluation and serving
-- the Colab run notebook works on high-memory GPU hardware
+| English | Custom Transformer | MarianMT |
+| --- | --- | --- |
+| Where can I buy a train ticket to Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? |
+| We need an ambulance right away. | Necesitamos una ambulancia enseguida. | Necesitamos una ambulancia de inmediato. |
+| Did you remember to back up the files? | ¿Recuerdas retrasar los archivos? | ¿Te acordaste de hacer copias de seguridad de los archivos? |
+| I need to reset my password again. | Necesito reanudar mi contraseña otra vez. | Necesito restablecer mi contraseña de nuevo. |
+| The washing machine stopped working this morning. | La lavadora dejó de trabajar esta mañana. | La lavadora dejó de funcionar esta mañana. |
 
 ## Remaining Gaps
 
-The project is functional, but several practical gaps remain:
+- production deployment beyond local and container verification
+- broader human evaluation beyond corpus BLEU and the 50-sentence manual benchmark
 
-- a full production deployment setup
-- broader human evaluation beyond corpus BLEU
+## Summary
 
-## Bottom Line
-
-This project currently includes:
-
-- a custom Transformer
-- a real multi-corpus training run
-- verified W&B tracking
-- a FastAPI inference layer
-- Docker packaging
-- a focused institutional translation path
-- a ChromaDB translation memory
-- Colab-based reproducible training
-
-Current short description:
-
-> a custom English-to-Spanish Transformer system trained end to end on a large OPUS corpus mix, evaluated at `31.41 sacreBLEU`, served through FastAPI, and extended with a translation-memory-based revision path for institutional language
+The current project state includes a trained custom Transformer, a completed large-scale run with `31.41 sacreBLEU`, FastAPI serving, Docker packaging, a MarianMT comparison, and an institutional translation path built on retrieved Europarl examples and a GPT revision step.
