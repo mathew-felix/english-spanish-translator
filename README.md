@@ -2,11 +2,17 @@
 
 [![Weights & Biases](https://img.shields.io/badge/W%26B-Latest%20Run-FFBE00?logo=weightsandbiases&logoColor=black)](https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti)
 
-This project implements an English-to-Spanish translation system around a custom Transformer built from raw PyTorch modules. It includes a full training pipeline, a MarianMT baseline comparison, a FastAPI service, and a second translation path for institutional text where the custom model draft is revised using retrieved Europarl examples and GPT.
+This project is built around a custom English-to-Spanish Transformer written in PyTorch and trained end to end on a large parallel corpus. The main work in the repository is the ML pipeline: data preparation, training, evaluation, and comparison against a MarianMT baseline. Around that model, the repo also includes the pieces needed to serve translations and handle institutional text with retrieved Europarl examples and a GPT revision step.
 
-## Latest Verified Run
+## Highlights
 
-The latest full end-to-end training run is summarized in `doc/PROJECT_REPORT.md`.
+- custom encoder-decoder Transformer built from raw PyTorch modules
+- large multi-corpus training pipeline over `4,391,390` aligned sentence pairs
+- 30-epoch run with `31.41 sacreBLEU` on `878,564` held-out test pairs
+- direct comparison against `Helsinki-NLP/opus-mt-en-es`
+- FastAPI service, Docker packaging, and a second path for institutional translation
+
+## Latest Run
 
 | Item | Value |
 | --- | --- |
@@ -19,47 +25,73 @@ The latest full end-to-end training run is summarized in `doc/PROJECT_REPORT.md`
 | Test split | 878,564 pairs |
 | Best validation loss | `2.5055` at epoch 29 |
 | Final test sacreBLEU | `31.41` |
-| W&B run | `acxn0hti` (`silvery-galaxy-1`) |
+| W&B run | [`acxn0hti`](https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti) |
 | Full evaluation time | `2:33:37` |
-
-Run links:
-
-- Project: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator
-- Latest run: https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
 
 ## Overview
 
-The repository covers two translation paths:
+The repository has one trained model and two inference paths.
 
-1. direct translation with the custom Transformer
-2. institutional translation revision using translation memory and GPT
+- `POST /translate` sends the input directly to the custom Transformer and returns the model output.
+- `POST /institutional-review` starts with the same custom-model draft, retrieves three similar Europarl pairs, and then passes the draft and examples to GPT for the final wording revision.
 
-The institutional path runs in this order:
+### System Diagram
 
-1. generate a draft with the custom Transformer
-2. retrieve similar Europarl sentence pairs
-3. review the draft with GPT using those examples
-4. return the final Spanish translation
+```text
+                     Training Path
+English-Spanish Data
+        |
+        v
+  Preprocessing + Split
+        |
+        v
+ Custom Transformer Training
+        |
+        v
+ Evaluation + MarianMT Comparison
+        |
+        v
+    best_model.pth
 
-The custom model remains the translation engine in both cases. The institutional path adds retrieved Europarl context and a final revision step for parliamentary terminology.
 
-## Tech Stack
+                    Inference Paths
+User sentence
+    |
+    +-------------------------------> /translate
+    |                                   |
+    |                                   v
+    |                           Custom Transformer
+    |                                   |
+    |                                   v
+    |                            Spanish output
+    |
+    +-------------------------------> /institutional-review
+                                        |
+                                        v
+                               Custom Transformer draft
+                                        |
+                                        v
+                             Retrieve 3 Europarl examples
+                                        |
+                                        v
+                                   GPT revision
+                                        |
+                                        v
+                                 Spanish output
+```
 
-- Python 3.12
-- PyTorch
-- Hugging Face `transformers`
-- FastAPI
-- Pydantic v2
-- Weights & Biases
-- pandas / NumPy / matplotlib / tqdm / sacrebleu
+## Main Components
 
-Additional components:
+- `run.py` handles dataset download, preprocessing, training, and evaluation.
+- `source/Model.py` contains the custom Transformer.
+- `source/inference.py` loads the checkpoint once for inference.
+- `serve.py` exposes the FastAPI endpoints.
+- `finetune/baseline_hf.py` runs the MarianMT comparison.
+- `rag/` stores the translation-memory builder and retriever.
 
-- LangGraph routes between the direct path and the institutional path
-- ChromaDB stores the translation memory used by the institutional path
-- GPT is used only in the final revision step after draft generation and retrieval
+## Quick Start
 
-## Installation
+Install:
 
 ```bash
 git clone https://github.com/mathew-felix/english-spanish-translator.git
@@ -69,7 +101,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Pipeline Usage
+Run the ML pipeline:
 
 ```bash
 python run.py --step download
@@ -78,161 +110,19 @@ python run.py --step train
 python run.py --step evaluate
 ```
 
-## Dataset Summary
-
-The completed OPUS preprocessing run kept:
-
-- `Europarl`: 1,940,734 pairs
-- `News-Commentary`: 46,904 pairs
-- `TED2020`: 403,752 pairs
-- `OpenSubtitles`: 2,000,000 pairs
-
-Total merged dataset:
-
-- `4,391,390` aligned sentence pairs
-
-Train/test split from the verified run:
-
-- `3,512,826` train
-- `878,564` test
-
-## Training Results
-
-The completed 30-epoch run showed stable training and steady validation improvement:
-
-- epoch 1 validation loss: `4.2375`
-- epoch 15 validation loss: `2.6032`
-- epoch 29 validation loss: `2.5055`
-- final full-test sacreBLEU: `31.41`
-
-Per-sentence BLEU score distribution from the full held-out evaluation run on `878,564` test pairs:
-
-![Per-sentence BLEU score distribution from the full held-out evaluation run](bleu_score_distribution.png)
-
-Late-epoch qualitative samples from the training log:
-
-- `How are you? -> ¿Cómo estás?`
-- `Where is the hospital? -> ¿Dónde está el hospital?`
-- `I need help with my homework. -> Necesito ayuda con mis deberes.`
-
-Run summary, system architecture, API notes, and comparison results are in `doc/PROJECT_REPORT.md`.
-
-## Hugging Face Comparison
-
-The repo now includes a direct comparison against the pretrained Hugging Face baseline `Helsinki-NLP/opus-mt-en-es`.
-
-The preferred benchmark is now a clean hand-written 50-sentence set. This replaces the earlier dataset-derived comparison as the main reference because some corpus test rows were noisy or misaligned.
-
-Artifacts:
-
-- `finetune/baseline_hf.py`
-- `finetune/manual_comparison_test_set.csv`
-
-Command used:
-
-```bash
-venv/bin/python finetune/baseline_hf.py \
-  --csv-path finetune/manual_comparison_test_set.csv \
-  --limit 50 \
-  --custom-output custom_model_results_manual.json \
-  --baseline-output baseline_results_manual.json
-```
-
-The comparison result files are kept locally. The benchmark setup and measured results are summarized in `doc/PROJECT_REPORT.md`.
-
-Manual comparison set:
-
-- `5` Daily
-- `5` Travel
-- `5` Health
-- `5` Work
-- `5` Education
-- `5` Emergency
-- `5` Shopping
-- `5` Social
-- `5` Technology
-- `5` Home
-
-What the manual 50-sentence comparison showed on the local CPU run:
-
-- MarianMT was stronger overall on fluency and lexical accuracy
-- the custom Transformer still produced valid Spanish on many short and medium everyday prompts
-- average latency was `6518.67 ms` for the custom model vs `470.43 ms` for MarianMT on this CPU run
-- exact reference matches were `11 / 50` for the custom model vs `20 / 50` for MarianMT
-- the biggest custom-model errors showed up on technology, shopping, and household phrasing
-- the main quality gap is still best explained by pretrained data scale and model maturity, not by the impossibility of the basic encoder-decoder architecture itself
-
-Comparison summary:
-
-- MarianMT is the stronger choice for broad everyday translation
-- the custom model is still useful for demonstrating the architecture and training pipeline
-- the institutional path exists because the custom model benefits from extra domain-specific context on parliamentary language
-
-Ten real side-by-side examples from the manual comparison set:
-
-| English | Custom Transformer | Helsinki MarianMT |
-| --- | --- | --- |
-| Good morning, did you sleep well? | Buenos días, ¿durmió bien? | Buenos días, ¿durmieron bien? |
-| Where can I buy a train ticket to Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? | ¿Dónde puedo comprar un billete de tren a Madrid? |
-| I have had a headache since early this morning. | Tengo dolor de cabeza desde esta mañana. | He tenido dolor de cabeza desde temprano esta mañana. |
-| The professor explained the problem step by step. | El profesor explicó el problema paso a paso. | El profesor explicó el problema paso a paso. |
-| We need an ambulance right away. | Necesitamos una ambulancia enseguida. | Necesitamos una ambulancia de inmediato. |
-| Can I pay by card, or do you only accept cash? | ¿Puedo pagar con tarjeta o sólo aceptar dinero? | ¿Puedo pagar con tarjeta, o solo aceptas efectivo? |
-| We laughed so hard that we cried. | Nos reímos tanto que lloramos. | Nos reímos tanto que lloramos. |
-| Did you remember to back up the files? | ¿Recuerdas retrasar los archivos? | ¿Te acordaste de hacer copias de seguridad de los archivos? |
-| I need to reset my password again. | Necesito reanudar mi contraseña otra vez. | Necesito restablecer mi contraseña de nuevo. |
-| The washing machine stopped working this morning. | La lavadora dejó de trabajar esta mañana. | La lavadora dejó de funcionar esta mañana. |
-
-## Institutional Translation Path
-
-The institutional translation path runs as follows:
-
-1. submit an English institutional sentence
-2. generate a first-pass draft with the custom model
-3. retrieve the top 3 similar Europarl translation pairs
-4. review the draft with GPT using those retrieved examples
-5. return the final Spanish translation
-
-Verified example:
-
-```json
-{
-  "input": "The parliamentary session was adjourned.",
-  "draft_translation": "Se suspendió la sesión parlamentaria.",
-  "decision": "EDIT",
-  "final_translation": "Se interrumpe la sesión parlamentaria."
-}
-```
-
-## When To Use Each Path
-
-Use `POST /translate` when:
-
-- the sentence is ordinary everyday English
-- you just want the direct custom-model output
-
-Use `POST /institutional-review` when:
-
-- the sentence is parliamentary, committee, council, motion, or amendment language
-- terminology consistency matters more than raw speed
-
-The institutional path is tuned for Europarl-style wording because the translation memory is built from Europarl. It is not the default path for casual everyday sentences.
-
-## API
-
-Run the FastAPI server locally:
+Start the API:
 
 ```bash
 uvicorn serve:app --reload
 ```
 
-Health check:
+## API
 
-```bash
-curl http://localhost:8000/health
-```
+- `GET /health`
+- `POST /translate`
+- `POST /institutional-review`
 
-Translation request:
+Example:
 
 ```bash
 curl -X POST http://localhost:8000/translate \
@@ -240,88 +130,13 @@ curl -X POST http://localhost:8000/translate \
   -d '{"text": "Where is the nearest hospital?"}'
 ```
 
-Observed local response from the current checkpoint:
-
-```json
-{
-  "input": "Where is the nearest hospital?",
-  "translation": "¿Dónde está el hospital más cercano?",
-  "latency_ms": 21467.58
-}
-```
-
-The exact latency depends on local hardware. The response above is from the latest local verification run on CPU.
-
-Institutional review request:
-
-```bash
-curl -X POST http://localhost:8000/institutional-review \
-  -H "Content-Type: application/json" \
-  -d '{"text": "The parliamentary session was adjourned."}'
-```
-
-Observed response:
-
-```json
-{
-  "input": "The parliamentary session was adjourned.",
-  "draft_translation": "Se suspendió la sesión parlamentaria.",
-  "decision": "EDIT",
-  "final_translation": "Se interrumpe la sesión parlamentaria.",
-  "retrieved_examples": [
-    {
-      "english": "The session is adjourned.",
-      "spanish": "Se interrumpe el periodo de sesiones.",
-      "distance": 0.177841
-    },
-    {
-      "english": "Adjournment of the session",
-      "spanish": "Interrupción del periodo de sesiones",
-      "distance": 0.225302
-    },
-    {
-      "english": "I declare adjourned the session of the European Parliament.",
-      "spanish": "Declaro interrumpido el período de sesiones del Parlamento Europeo.",
-      "distance": 0.298554
-    }
-  ],
-  "latency_ms": 10508.06
-}
-```
-
-Swagger UI screenshot:
-
-![Swagger UI](assets/swagger_demo.png)
-
-Browser walkthrough GIF:
+Browser walkthrough:
 
 ![Institutional review walkthrough](assets/ui_demo.gif)
 
-## Project Scope
-
-Main technical components:
-
-1. custom translation model from scratch
-2. large-scale training and evaluation
-3. baseline comparison against MarianMT
-4. institutional translation path built on top of the model
-
-## Weights & Biases
-
-Set your API key before training if you want online tracking:
-
-```bash
-export WANDB_API_KEY=your_api_key
-python run.py --step train
-```
-
-Latest verified run:
-
-- https://wandb.ai/relixmatrix-texas-state-university/english-spanish-translator/runs/acxn0hti
-
 ## Documentation
 
-- `doc/PROJECT_REPORT.md`: consolidated project report
+Detailed training metrics, local testing notes, MarianMT comparison results, and MacBook M4 verification results are in `doc/PROJECT_REPORT.md`.
 
 ## License
 
