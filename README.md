@@ -101,6 +101,23 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Download the model files from the latest GitHub Release:
+
+```bash
+python3 scripts/download_model.py
+```
+
+This downloads:
+
+- `best_model.pth` to the repository root
+- `tokenizer.zip` from the release and extracts it to `data/tokenizer/`
+
+Use a specific release tag if needed:
+
+```bash
+python3 scripts/download_model.py --tag eng-sp-tranlate
+```
+
 Run the ML pipeline:
 
 ```bash
