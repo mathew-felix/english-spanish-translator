@@ -13,6 +13,10 @@ RUN pip install --upgrade pip && \
 
 COPY serve.py ./serve.py
 COPY source ./source
+COPY agent ./agent
+COPY rag ./rag
+COPY templates ./templates
+COPY assets ./assets
 COPY best_model.pth ./best_model.pth
 COPY data/tokenizer ./data/tokenizer
 
