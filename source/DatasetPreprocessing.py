@@ -8,7 +8,6 @@ import unicodedata
 
 import pandas as pd
 
-
 RAW_DATA_DIR = os.path.join(".", "data", "raw")
 MERGED_DATASET_PATH = os.path.join(".", "data", "english_spanish.csv")
 TRAIN_DATASET_PATH = os.path.join(".", "data", "train.csv")

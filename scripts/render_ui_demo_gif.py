@@ -10,9 +10,8 @@ import requests
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-
 BASE_URL = os.getenv("UI_DEMO_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-OUTPUT_GIF = os.path.join("assets", "ui_demo.gif")
+OUTPUT_GIF = os.getenv("UI_DEMO_OUTPUT_GIF", os.path.join("assets", "demo.gif"))
 CANVAS_SIZE = (1600, 1000)
 VIEWPORT = {"width": 1660, "height": 1320}
 FRAME_BACKGROUND = "#efe6da"
@@ -42,7 +41,8 @@ def _wait_for_app(timeout_seconds: int = 45) -> None:
         time.sleep(1)
     raise RuntimeError(
         f"FastAPI app is not reachable on {BASE_URL}. "
-        "Start the app first with `docker compose up -d` or `venv/bin/uvicorn serve:app --reload`."
+        "Start the app first with `docker compose up -d` or "
+        "`venv/bin/python -m uvicorn src.serve:app --reload`."
     )
 
 

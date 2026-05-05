@@ -1,6 +1,7 @@
+import math
+
 import torch
 from torch import nn
-import math
 
 
 # FIX Bug #5: extracted to module level — was duplicated inside Encoder and Decoder

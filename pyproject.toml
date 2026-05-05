@@ -1,0 +1,35 @@
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["agent", "rag", "scripts", "src", "source"]
+omit = [
+  "tests/*",
+  "notebooks/colab_training.ipynb",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = [
+  ".agents",
+  "notebooks/colab_training.ipynb",
+  "doc",
+  "docs",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"agent/run.py" = ["E402"]
+"finetune/baseline_hf.py" = ["E402"]
+"rag/build_index.py" = ["E402"]
+"rag/retriever.py" = ["E402"]

@@ -1,17 +1,29 @@
 .git
+.agents
+.github
 .gitignore
+.env.example
 .DS_Store
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
 .env
+.env.*
+!.env.example
 venv/
+.venv/
 wandb/
 
 doc/
-colab_training.ipynb
+docs/
+notebooks/colab_training.ipynb
 eng_sp_training.ipynb
 english_spanish_translator_20260409_155517.zip
 output.txt
@@ -30,4 +42,5 @@ data/*
 !data/tokenizer/**
 
 finetune/
+tests/
 rag/_tmp_probe_db/

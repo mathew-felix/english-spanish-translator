@@ -1,22 +1,23 @@
 import os
+
+import matplotlib.pyplot as plt
 import torch
 import wandb
 from torch import nn
-import matplotlib.pyplot as plt
-import pandas as pd
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from transformers import BertTokenizer
-from source.Model import Transformer
+
+from source.Config import Config
 from source.DatasetTranslation import TranslationDataset
 from source.Evaluate import decode_sentences, generate_translations
-from tqdm import tqdm
-from source.Config import Config
+from source.Model import Transformer
 
 try:
     import sacrebleu as _sacrebleu
     HAS_SACREBLEU = True
 except ImportError:
-    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+    from nltk.translate.bleu_score import SmoothingFunction, corpus_bleu
     HAS_SACREBLEU = False
 
 

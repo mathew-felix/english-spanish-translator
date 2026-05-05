@@ -4,6 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: english-spanish-translator-api
+    environment:
+      MODEL_RELEASE_TAG: eng-sp-tranlate
+      TRANSLATOR_AUTO_DOWNLOAD_MODEL: "1"
+      TRANSLATOR_HOST: 0.0.0.0
+      TRANSLATOR_PORT: "8000"
+      WANDB_MODE: offline
     ports:
       - "8000:8000"
     healthcheck:

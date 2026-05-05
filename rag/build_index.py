@@ -14,11 +14,10 @@ os.environ.setdefault("ANONYMIZED_TELEMETRY", "FALSE")
 
 import chromadb
 from chromadb.config import Settings
-from chromadb.errors import InvalidCollectionException
+from chromadb.errors import NotFoundError
 from sentence_transformers import SentenceTransformer
 
 from rag.retriever import COLLECTION_NAME, EMBEDDING_MODEL_NAME
-
 
 MAX_ROWS = 50000
 EMBED_BATCH_SIZE = 256
@@ -86,7 +85,7 @@ def _reset_collection(client) -> None:
     """
     try:
         client.delete_collection(name=COLLECTION_NAME)
-    except (InvalidCollectionException, ValueError):
+    except (NotFoundError, ValueError):
         return
 
 

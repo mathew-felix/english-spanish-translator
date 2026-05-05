@@ -8,7 +8,6 @@ from transformers import BertTokenizer
 from source.Config import Config
 from source.Model import Transformer
 
-
 _INFERENCE_ENGINE = None
 _INFERENCE_LOCK = threading.Lock()
 

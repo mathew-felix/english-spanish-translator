@@ -1,7 +1,7 @@
 # FIX Bug #15: removed unused BertTokenizer import
-from torch.utils.data import Dataset
 import pandas as pd
 import torch
+from torch.utils.data import Dataset
 
 
 class TranslationDataset(Dataset):

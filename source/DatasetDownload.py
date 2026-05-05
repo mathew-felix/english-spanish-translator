@@ -8,7 +8,6 @@ import zipfile
 
 import certifi
 
-
 OPUS_API_URL = "https://opus.nlpl.eu/opusapi/"
 OPUS_CORPORA = (
     "Europarl",

@@ -11,9 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from agent.tools import build_rag_translation_review
 from source.inference import get_inference_engine, translate
 
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+TEMPLATES = Jinja2Templates(directory=os.path.join(PROJECT_ROOT, "templates"))
 
 
 class TranslationRequest(BaseModel):
@@ -89,7 +88,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="assets")
+app.mount(
+    "/assets",
+    StaticFiles(directory=os.path.join(PROJECT_ROOT, "assets")),
+    name="assets",
+)
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -15,7 +15,6 @@ if REPO_ROOT not in sys.path:
 from source.Config import Config
 from source.inference import get_inference_engine
 
-
 DEFAULT_MODEL_NAME = "Helsinki-NLP/opus-mt-en-es"
 
 
@@ -97,7 +96,6 @@ def build_results(rows, model_name):
     """Generate JSON-ready comparison outputs for both models.
     The same input rows are used for the custom model and the Marian baseline.
     """
-    config = Config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     custom_engine = get_inference_engine()

@@ -19,7 +19,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 from agent.graph import build_graph
 from agent.tools import get_api_base_url, load_local_env
 
-
 TEST_CASES = [
     ("Translate 'I need a doctor' to Spanish", "translate_with_custom_model"),
     ("How do you say 'the train is late'?", "translate_with_custom_model"),
@@ -66,7 +65,7 @@ def _start_local_api_if_needed() -> Optional[subprocess.Popen]:
             sys.executable,
             "-m",
             "uvicorn",
-            "serve:app",
+            "src.serve:app",
             "--host",
             host,
             "--port",

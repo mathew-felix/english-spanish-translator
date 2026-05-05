@@ -14,7 +14,6 @@ from openai import OpenAI
 
 from agent.tools import TOOLS, load_local_env
 
-
 SYSTEM_PROMPT = (
     "You are an English-to-Spanish translation router. "
     "Use translate_with_custom_model for general translation requests or 'how do you say' questions. "

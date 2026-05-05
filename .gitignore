@@ -1,4 +1,5 @@
 venv/
+.venv/
 data/
 .idea/
 runs/
@@ -7,8 +8,18 @@ rag/chroma_db/
 rag/_tmp_probe_db/
 best_model.pth
 .env
+.env.*
+!.env.example
 .DS_Store
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.log
 agent/__pycache__/
 finetune/__pycache__/
 rag/__pycache__/

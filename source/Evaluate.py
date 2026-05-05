@@ -1,18 +1,20 @@
 import os
+
+import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
-from transformers import BertTokenizer
-from source.Config import Config
-from source.Model import Transformer
-from source.DatasetTranslation import TranslationDataset
 from tqdm import tqdm
-import matplotlib.pyplot as plt
+from transformers import BertTokenizer
+
+from source.Config import Config
+from source.DatasetTranslation import TranslationDataset
+from source.Model import Transformer
 
 try:
     import sacrebleu as _sacrebleu
     HAS_SACREBLEU = True
 except ImportError:
-    from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
+    from nltk.translate.bleu_score import SmoothingFunction, corpus_bleu
     HAS_SACREBLEU = False
     print("Warning: sacrebleu not installed — falling back to nltk corpus_bleu.")
 

@@ -4,16 +4,14 @@ The collection stores English Europarl sentences with Spanish translations in me
 
 import os
 import threading
-from typing import Optional
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "FALSE")
 
 import chromadb
 import torch
 from chromadb.config import Settings
-from chromadb.errors import InvalidCollectionException
+from chromadb.errors import NotFoundError
 from sentence_transformers import SentenceTransformer
-
 
 COLLECTION_NAME = "translation_memory"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
@@ -91,7 +89,7 @@ def _get_collection():
                 client = _get_client()
                 try:
                     _COLLECTION = client.get_collection(name=COLLECTION_NAME)
-                except InvalidCollectionException as exc:
+                except NotFoundError as exc:
                     raise RuntimeError(
                         "RAG translation memory is not built. "
                         "Run `venv/bin/python rag/build_index.py` first."
@@ -101,7 +99,8 @@ def _get_collection():
 
 def retrieve_similar_translations(query: str, k: int = DEFAULT_TOP_K) -> list[dict]:
     """Retrieve the top-k similar English-to-Spanish memory pairs.
-    The index must already exist and the query must be non-empty.
+    The query must be non-empty. When the translation-memory index has not been
+    built yet, returns an empty list so API review can still run without RAG context.
     """
     cleaned_query = query.strip()
     if not cleaned_query:
@@ -109,8 +108,12 @@ def retrieve_similar_translations(query: str, k: int = DEFAULT_TOP_K) -> list[di
     if k < 1:
         raise ValueError("k must be at least 1.")
 
+    try:
+        collection = _get_collection()
+    except RuntimeError:
+        return []
+
     model = _get_embedding_model()
-    collection = _get_collection()
     query_embedding = model.encode(
         [cleaned_query],
         normalize_embeddings=True,

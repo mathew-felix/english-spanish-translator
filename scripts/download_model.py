@@ -6,10 +6,9 @@ import zipfile
 
 import requests
 
-
 DEFAULT_OWNER = "mathew-felix"
 DEFAULT_REPO = "english-spanish-translator"
-DEFAULT_TAG = "latest"
+DEFAULT_TAG = "eng-sp-tranlate"
 DEFAULT_CHECKPOINT_ASSET = "best_model.pth"
 DEFAULT_TOKENIZER_ASSET = "tokenizer.zip"
 
@@ -116,11 +115,19 @@ def _parse_args():
     parser = argparse.ArgumentParser(
         description="Download the model checkpoint and tokenizer from a GitHub Release."
     )
-    parser.add_argument("--owner", default=DEFAULT_OWNER, help="GitHub owner or org name.")
-    parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repository name.")
+    parser.add_argument(
+        "--owner",
+        default=os.getenv("MODEL_RELEASE_OWNER", DEFAULT_OWNER),
+        help="GitHub owner or org name.",
+    )
+    parser.add_argument(
+        "--repo",
+        default=os.getenv("MODEL_RELEASE_REPO", DEFAULT_REPO),
+        help="GitHub repository name.",
+    )
     parser.add_argument(
         "--tag",
-        default=DEFAULT_TAG,
+        default=os.getenv("MODEL_RELEASE_TAG", DEFAULT_TAG),
         help="Release tag to use. Defaults to the latest release.",
     )
     parser.add_argument(

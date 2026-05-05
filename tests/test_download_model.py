@@ -1,0 +1,117 @@
+import pytest
+
+from scripts import download_model
+
+
+def test_build_release_api_url_uses_pinned_tag_endpoint():
+    url = download_model._build_release_api_url(
+        owner="owner",
+        repo="repo",
+        tag="eng-sp-tranlate",
+    )
+
+    assert url == "https://api.github.com/repos/owner/repo/releases/tags/eng-sp-tranlate"
+
+
+def test_build_release_api_url_supports_latest_endpoint():
+    url = download_model._build_release_api_url(
+        owner="owner",
+        repo="repo",
+        tag="latest",
+    )
+
+    assert url == "https://api.github.com/repos/owner/repo/releases/latest"
+
+
+def test_find_asset_download_url_returns_exact_asset():
+    release_metadata = {
+        "assets": [
+            {"name": "tokenizer.zip", "browser_download_url": "https://example.test/t.zip"},
+            {"name": "best_model.pth", "browser_download_url": "https://example.test/m.pth"},
+        ]
+    }
+
+    assert (
+        download_model._find_asset_download_url(release_metadata, "best_model.pth")
+        == "https://example.test/m.pth"
+    )
+
+
+def test_find_asset_download_url_reports_available_assets():
+    release_metadata = {"assets": [{"name": "tokenizer.zip"}]}
+
+    with pytest.raises(ValueError, match="tokenizer.zip"):
+        download_model._find_asset_download_url(release_metadata, "best_model.pth")
+
+
+def test_extract_tokenizer_archive_handles_nested_root(tmp_path):
+    archive_path = tmp_path / "tokenizer.zip"
+    tokenizer_dir = tmp_path / "data" / "tokenizer"
+
+    import zipfile
+
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("tokenizer/config.json", "{}")
+
+    download_model._extract_tokenizer_archive(
+        archive_path=str(archive_path),
+        tokenizer_dir=str(tokenizer_dir),
+        force=False,
+    )
+
+    assert (tokenizer_dir / "config.json").read_text(encoding="utf-8") == "{}"
+
+
+def test_extract_tokenizer_archive_skips_existing_without_force(tmp_path):
+    archive_path = tmp_path / "tokenizer.zip"
+    tokenizer_dir = tmp_path / "data" / "tokenizer"
+    tokenizer_dir.mkdir(parents=True)
+    existing_file = tokenizer_dir / "config.json"
+    existing_file.write_text("existing", encoding="utf-8")
+
+    import zipfile
+
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("config.json", "new")
+
+    download_model._extract_tokenizer_archive(
+        archive_path=str(archive_path),
+        tokenizer_dir=str(tokenizer_dir),
+        force=False,
+    )
+
+    assert existing_file.read_text(encoding="utf-8") == "existing"
+
+
+def test_main_downloads_checkpoint_and_tokenizer(monkeypatch, tmp_path):
+    release_metadata = {
+        "assets": [
+            {"name": "best_model.pth", "browser_download_url": "checkpoint-url"},
+            {"name": "tokenizer.zip", "browser_download_url": "tokenizer-url"},
+        ]
+    }
+
+    def fake_download(download_url, destination_path):
+        if download_url == "checkpoint-url":
+            with open(destination_path, "wb") as handle:
+                handle.write(b"checkpoint")
+            return
+
+        import zipfile
+
+        with zipfile.ZipFile(destination_path, "w") as archive:
+            archive.writestr("tokenizer/config.json", "{}")
+
+    monkeypatch.setattr(download_model, "_get_repo_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        download_model,
+        "_fetch_release_metadata",
+        lambda owner, repo, tag: release_metadata,
+    )
+    monkeypatch.setattr(download_model, "_download_file", fake_download)
+    monkeypatch.setattr("sys.argv", ["download_model.py"])
+
+    download_model.main()
+
+    assert (tmp_path / "best_model.pth").read_bytes() == b"checkpoint"
+    assert (tmp_path / "data" / "tokenizer" / "config.json").exists()
