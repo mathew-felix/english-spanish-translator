@@ -9,6 +9,8 @@ with optional retrieval and GPT-based review steps.
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
+Live demo: [Hugging Face Space](https://huggingface.co/spaces/mathew-felix/nmt-translator)
+
 ## Demo
 
 ![Demo GIF](assets/demo.gif)
