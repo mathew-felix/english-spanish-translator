@@ -1,1 +1,1 @@
-"""Application and CLI entrypoints for the English–Spanish translator project."""
+"""Application and CLI entrypoints for the English-to-Spanish review project."""

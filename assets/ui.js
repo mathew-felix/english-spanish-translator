@@ -18,14 +18,18 @@ function resetSteps() {
   });
   document.getElementById("draft-output").textContent =
     "The first-pass Spanish translation will appear here.";
+  document.getElementById("source-output").textContent = "";
   document.getElementById("context-output").textContent =
     "Similar bilingual examples will appear here.";
+  document.getElementById("context-state").textContent = "";
   document.getElementById("decision-output").textContent =
     "The review decision will appear here.";
+  document.getElementById("reviewer-output").textContent = "";
   document.getElementById("final-output").textContent =
     "The final reviewed Spanish translation will appear here.";
   document.getElementById("status-badge").textContent = "Waiting for input";
   document.getElementById("latency-badge").textContent = "Waiting";
+  document.getElementById("copy-final").disabled = true;
 }
 
 function setActiveStep(stepId, statusText) {
@@ -49,6 +53,10 @@ function escapeHtml(value) {
 }
 
 function renderExamples(examples) {
+  if (!examples.length) {
+    return '<div class="empty-state">No bilingual examples were available for this request.</div>';
+  }
+
   return examples
     .map(
       (example, index) => `
@@ -94,20 +102,24 @@ function bindReviewForm() {
       const payload = await submitReview(textarea.value);
 
       setActiveStep("step-draft", "Step 1 of 4: draft ready");
+      document.getElementById("source-output").textContent = `Source: ${payload.input}`;
       document.getElementById("draft-output").textContent = payload.draft_translation;
       await wait(1200);
 
-      setActiveStep("step-context", "Step 2 of 4: similar examples loaded");
+      setActiveStep("step-context", "Step 2 of 4: context checked");
+      document.getElementById("context-state").textContent = payload.context_message;
       document.getElementById("context-output").innerHTML = renderExamples(payload.retrieved_examples);
       await wait(1400);
 
       setActiveStep("step-decision", "Step 3 of 4: review decision");
       document.getElementById("decision-output").textContent = payload.decision;
+      document.getElementById("reviewer-output").textContent = payload.reviewer_explanation;
       await wait(1400);
 
       setActiveStep("step-final", "Step 4 of 4: final translation ready");
       document.getElementById("final-output").textContent = payload.final_translation;
       document.getElementById("latency-badge").textContent = `${payload.latency_ms} ms`;
+      document.getElementById("copy-final").disabled = false;
     } catch (error) {
       setActiveStep("step-final", "Review failed");
       document.getElementById("final-output").textContent = error.message;
@@ -122,5 +134,9 @@ function bindReviewForm() {
 document.addEventListener("DOMContentLoaded", () => {
   bindExampleChips();
   bindReviewForm();
+  document.getElementById("copy-final").addEventListener("click", async () => {
+    const finalText = document.getElementById("final-output").textContent;
+    await navigator.clipboard.writeText(finalText);
+  });
   resetSteps();
 });

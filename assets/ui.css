@@ -217,6 +217,28 @@ textarea:focus {
   color: var(--blue);
 }
 
+.final-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.copy-button {
+  border: 1px solid rgba(31, 41, 51, 0.16);
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.copy-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .review-step {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
@@ -263,6 +285,13 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.source-line,
+.state-line {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
 .context-list {
   display: grid;
   gap: 12px;
@@ -284,6 +313,14 @@ textarea:focus {
   margin-top: 8px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.empty-state {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(248, 216, 203, 0.45);
+  color: var(--muted);
+  border: 1px solid rgba(178, 74, 42, 0.14);
 }
 
 .final-header {

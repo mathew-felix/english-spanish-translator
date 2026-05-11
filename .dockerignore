@@ -1,5 +1,4 @@
 .git
-.agents
 .github
 .gitignore
 .env.example
@@ -21,9 +20,6 @@ venv/
 .venv/
 wandb/
 
-doc/
-docs/
-notebooks/colab_training.ipynb
 eng_sp_training.ipynb
 english_spanish_translator_20260409_155517.zip
 output.txt
@@ -37,9 +33,15 @@ test.csv
 tokenizer/
 weights/
 
-data/*
-!data/tokenizer/
-!data/tokenizer/**
+# Runtime/model artifacts are downloaded or generated outside the image build.
+best_model.pth
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+data/
+weights/
+tokenizer/
 
 finetune/
 tests/

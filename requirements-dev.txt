@@ -1,5 +1,8 @@
+-r requirements.txt
+
 pip-audit==2.10.0
 playwright==1.49.1
+psutil==7.2.0
 pytest==9.0.3
 pytest-cov==7.1.0
 ruff==0.15.12

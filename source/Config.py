@@ -44,7 +44,7 @@ class Config:
         # Default for bert-base-multilingual-cased; overwritten after add_special_tokens()
         self.vocab_size = 119547
 
-        # Token IDs — assigned after tokenizer initialisation in Train.py / Evaluate.py
+        # Token IDs assigned after tokenizer initialisation in Train.py / Evaluate.py
         self.pad_token_id = None
         self.unk_token_id = None
         self.sos_token_id = None

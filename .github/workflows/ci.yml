@@ -5,6 +5,9 @@ on:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * 1"
 
 jobs:
   test:
@@ -23,7 +26,12 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Preflight demo mode
+        env:
+          TRANSLATOR_DEMO_MODE: "1"
+        run: python scripts/preflight.py --skip-network
 
       - name: Lint
         run: python -m ruff check .
@@ -33,3 +41,32 @@ jobs:
 
       - name: Dependency audit
         run: python -m pip_audit -r requirements.txt
+
+  docker:
+    name: Docker smoke
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    env:
+      TRANSLATOR_AUTO_DOWNLOAD_MODEL: "0"
+      TRANSLATOR_DEMO_MODE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Compose service
+        run: docker compose build --progress=plain api
+
+      - name: Start Compose service
+        run: docker compose up --no-build --wait --wait-timeout 180 api
+
+      - name: Check API health
+        run: curl --fail --show-error --silent http://127.0.0.1:8000/health
+
+      - name: Show Compose logs on failure
+        if: failure()
+        run: docker compose logs api
+
+      - name: Stop Compose service
+        if: always()
+        run: docker compose down --remove-orphans

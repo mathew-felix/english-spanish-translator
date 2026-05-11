@@ -19,8 +19,8 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+build/
 *.log
-agent/__pycache__/
 finetune/__pycache__/
 rag/__pycache__/
 scripts/__pycache__/
@@ -33,7 +33,5 @@ output.txt
 weights/
 eng_sp_training.ipynb
 rtx6000pro.txt
-doc/*.md
-!doc/PROJECT_REPORT.md
 finetune/*.json
 finetune/comparison_test_set.csv

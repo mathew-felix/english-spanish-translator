@@ -1,0 +1,5 @@
+-r requirements.txt
+
+gradio==5.50.0
+pillow==11.3.0
+playwright==1.49.1

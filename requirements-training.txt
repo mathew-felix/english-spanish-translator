@@ -1,0 +1,8 @@
+-r requirements.txt
+
+certifi==2024.8.30
+matplotlib==3.9.3
+pandas==2.2.3
+sacrebleu==2.6.0
+tqdm==4.67.1
+wandb==0.19.11

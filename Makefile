@@ -1,9 +1,21 @@
-.PHONY: api audit clean dev-install docker-build docker-up lint test
+.PHONY: api api-install audit clean demo-install dev-install docker-build docker-up lint rag-install test training-install
 
 PYTHON ?= python
 
+api-install:
+	$(PYTHON) -m pip install -r requirements.txt
+
 dev-install:
-	$(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
+	$(PYTHON) -m pip install -r requirements-dev.txt
+
+training-install:
+	$(PYTHON) -m pip install -r requirements-training.txt
+
+rag-install:
+	$(PYTHON) -m pip install -r requirements-rag.txt
+
+demo-install:
+	$(PYTHON) -m pip install -r requirements-demo.txt
 
 api:
 	$(PYTHON) -m uvicorn src.serve:app --host 127.0.0.1 --port 8000

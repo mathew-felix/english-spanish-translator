@@ -1,0 +1,4 @@
+-r requirements.txt
+
+chromadb==1.5.8
+sentence-transformers==5.4.1

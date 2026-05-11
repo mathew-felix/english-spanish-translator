@@ -12,6 +12,39 @@ _INFERENCE_ENGINE = None
 _INFERENCE_LOCK = threading.Lock()
 
 
+DEMO_TRANSLATIONS = {
+    "the parliamentary session was adjourned.": "Se aplazo la sesion parlamentaria.",
+    "the committee approved the amendment.": "El comite aprobo la enmienda.",
+    "the council voted on the motion.": "El Consejo voto sobre la mocion.",
+    "the agency published the legal notice.": "La agencia publico el aviso legal.",
+    "the policy report was submitted for review.": "El informe de politica se presento para revision.",
+}
+
+
+def _demo_mode_enabled():
+    """Return whether inference should use deterministic demo translations."""
+    return os.getenv("TRANSLATOR_DEMO_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "demo",
+    }
+
+
+class DemoInferenceEngine:
+    """Checkpoint-free inference engine for fast demos and CI smoke tests."""
+
+    def translate(self, text):
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            raise ValueError("Text must not be empty.")
+
+        lowered = cleaned_text.lower()
+        if lowered in DEMO_TRANSLATIONS:
+            return DEMO_TRANSLATIONS[lowered]
+        return f"Traduccion demo pendiente de revision: {cleaned_text}"
+
+
 class InferenceEngine:
     """Loads the tokenizer and checkpoint once for API inference.
     The checkpoint config is applied before model construction so weight shapes match.
@@ -167,7 +200,10 @@ def get_inference_engine():
     if _INFERENCE_ENGINE is None:
         with _INFERENCE_LOCK:
             if _INFERENCE_ENGINE is None:
-                _INFERENCE_ENGINE = InferenceEngine()
+                if _demo_mode_enabled():
+                    _INFERENCE_ENGINE = DemoInferenceEngine()
+                else:
+                    _INFERENCE_ENGINE = InferenceEngine()
     return _INFERENCE_ENGINE
 
 

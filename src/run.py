@@ -1,11 +1,6 @@
 import argparse
 import logging
 
-from source.DatasetDownload import datasetDownload
-from source.DatasetPreprocessing import DatasetPreprocessing
-from source.Evaluate import evaluate
-from source.Train import Train
-
 logger = logging.getLogger(__name__)
 
 
@@ -28,15 +23,23 @@ def main():
     args = parser.parse_args()
 
     if args.step == "download":
+        from source.DatasetDownload import datasetDownload
+
         logger.info("Starting dataset download...")
         datasetDownload()
     elif args.step == "preprocess":
+        from source.DatasetPreprocessing import DatasetPreprocessing
+
         logger.info("Starting dataset preprocessing...")
         DatasetPreprocessing()
     elif args.step == "train":
+        from source.Train import Train
+
         logger.info("Starting training...")
         Train()
     elif args.step == "evaluate":
+        from source.Evaluate import evaluate
+
         logger.info("Starting evaluation...")
         evaluate()
 

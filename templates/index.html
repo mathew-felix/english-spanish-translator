@@ -12,8 +12,9 @@
         <p class="eyebrow">Institutional Translation Review</p>
         <h1>Review important English-to-Spanish translations step by step.</h1>
         <p class="hero-text">
-          This process drafts a translation with the custom model, retrieves similar Europarl
-          examples, and then revises the draft before returning the final Spanish wording.
+          This process drafts a translation with the custom model, retrieves similar
+          institutional examples when available, records whether GPT review was used,
+          and returns final Spanish wording with provenance.
         </p>
       </header>
 
@@ -56,6 +57,20 @@
               >
                 Council example
               </button>
+              <button
+                type="button"
+                class="example-chip"
+                data-value="The agency published the legal notice."
+              >
+                Legal notice
+              </button>
+              <button
+                type="button"
+                class="example-chip"
+                data-value="The policy report was submitted for review."
+              >
+                Policy report
+              </button>
             </div>
 
             <button type="submit" class="primary-button">Run review</button>
@@ -68,7 +83,7 @@
             </article>
             <article class="info-card">
               <span class="info-label">Context</span>
-              <strong>50K Europarl memory</strong>
+              <strong>Local review memory</strong>
             </article>
             <article class="info-card">
               <span class="info-label">Review</span>
@@ -90,6 +105,7 @@
             <div class="step-number">1</div>
             <div class="step-body">
               <h3>Custom model draft</h3>
+              <p class="source-line" id="source-output"></p>
               <p id="draft-output">The first-pass Spanish translation will appear here.</p>
             </div>
           </article>
@@ -98,6 +114,7 @@
             <div class="step-number">2</div>
             <div class="step-body">
               <h3>Retrieved examples</h3>
+              <p class="state-line" id="context-state"></p>
               <div id="context-output" class="context-list">
                 Similar bilingual examples will appear here.
               </div>
@@ -109,6 +126,7 @@
             <div class="step-body">
               <h3>Review decision</h3>
               <p id="decision-output">The review decision will appear here.</p>
+              <p class="state-line" id="reviewer-output"></p>
             </div>
           </article>
 
@@ -117,7 +135,12 @@
             <div class="step-body">
               <div class="final-header">
                 <h3>Final translation</h3>
-                <span id="latency-badge" class="latency-pill">Waiting</span>
+                <div class="final-actions">
+                  <span id="latency-badge" class="latency-pill">Waiting</span>
+                  <button type="button" id="copy-final" class="copy-button" disabled>
+                    Copy
+                  </button>
+                </div>
               </div>
               <p id="final-output">The final reviewed Spanish translation will appear here.</p>
             </div>

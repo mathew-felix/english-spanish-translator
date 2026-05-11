@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -8,11 +9,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from agent.tools import build_rag_translation_review
 from source.inference import get_inference_engine, translate
+from src.env import load_local_env
+from src.review import build_institutional_review
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TEMPLATES = Jinja2Templates(directory=os.path.join(PROJECT_ROOT, "templates"))
+logger = logging.getLogger(__name__)
 
 
 class TranslationRequest(BaseModel):
@@ -71,6 +74,10 @@ class InstitutionalReviewResponse(BaseModel):
     decision: str
     final_translation: str
     retrieved_examples: list[ReviewContextExample]
+    context_status: str
+    context_message: str
+    reviewer_status: str
+    reviewer_explanation: str
     latency_ms: float
 
 
@@ -79,12 +86,13 @@ async def lifespan(app: FastAPI):
     """Load the model once when the API process starts.
     This avoids reloading the checkpoint on every `/translate` request.
     """
+    load_local_env()
     get_inference_engine()
     yield
 
 
 app = FastAPI(
-    title="English-to-Spanish Translator API",
+    title="Institutional Translation Review API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -93,6 +101,32 @@ app.mount(
     StaticFiles(directory=os.path.join(PROJECT_ROOT, "assets")),
     name="assets",
 )
+
+
+@app.middleware("http")
+async def log_request_summary(request: Request, call_next):
+    """Log route-level request telemetry without recording input text."""
+    started_at = time.perf_counter()
+    status_code = 500
+    error_class = "-"
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as exc:
+        error_class = type(exc).__name__
+        raise
+    finally:
+        latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        logger.info(
+            "request_complete method=%s path=%s status_code=%s latency_ms=%s error_class=%s",
+            request.method,
+            request.url.path,
+            status_code,
+            latency_ms,
+            error_class,
+        )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -145,7 +179,7 @@ def institutional_review_endpoint(payload: TranslationRequest):
     started_at = time.perf_counter()
 
     try:
-        review_result = build_rag_translation_review(payload.text)
+        review_result = build_institutional_review(payload.text)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (FileNotFoundError, RuntimeError) as exc:
@@ -165,5 +199,9 @@ def institutional_review_endpoint(payload: TranslationRequest):
             )
             for pair in review_result["retrieved_pairs"]
         ],
+        context_status=review_result["context_status"],
+        context_message=review_result["context_message"],
+        reviewer_status=review_result["reviewer_status"],
+        reviewer_explanation=review_result["reviewer_explanation"],
         latency_ms=latency_ms,
     )

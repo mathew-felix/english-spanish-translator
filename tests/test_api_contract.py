@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def serve_module(monkeypatch):
-    fake_agent_tools = types.ModuleType("agent.tools")
-    fake_agent_tools.build_rag_translation_review = lambda text: {
+    fake_review = types.ModuleType("src.review")
+    fake_review.build_institutional_review = lambda text: {
         "input": text,
         "draft_translation": "borrador",
         "decision": "KEEP",
@@ -21,13 +21,17 @@ def serve_module(monkeypatch):
                 "distance": 0.123,
             }
         ],
+        "context_status": "available",
+        "context_message": "Retrieved bilingual examples.",
+        "reviewer_status": "gpt_not_configured",
+        "reviewer_explanation": "OPENAI_API_KEY is not configured.",
     }
 
     fake_inference = types.ModuleType("source.inference")
     fake_inference.get_inference_engine = lambda: object()
     fake_inference.translate = lambda text: f"traducido: {text}"
 
-    monkeypatch.setitem(sys.modules, "agent.tools", fake_agent_tools)
+    monkeypatch.setitem(sys.modules, "src.review", fake_review)
     monkeypatch.setitem(sys.modules, "source.inference", fake_inference)
     sys.modules.pop("src.serve", None)
 
@@ -74,3 +78,5 @@ def test_institutional_review_endpoint_returns_context(serve_module):
     assert payload["decision"] == "KEEP"
     assert payload["final_translation"] == "borrador"
     assert payload["retrieved_examples"][0]["english"] == "The session is open."
+    assert payload["context_status"] == "available"
+    assert payload["reviewer_status"] == "gpt_not_configured"

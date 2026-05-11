@@ -5,8 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: english-spanish-translator-api
     environment:
-      MODEL_RELEASE_TAG: eng-sp-tranlate
-      TRANSLATOR_AUTO_DOWNLOAD_MODEL: "1"
+      MODEL_RELEASE_TAG: ${MODEL_RELEASE_TAG:-eng-sp-tranlate}
+      TRANSLATOR_AUTO_DOWNLOAD_MODEL: ${TRANSLATOR_AUTO_DOWNLOAD_MODEL:-1}
+      TRANSLATOR_DEMO_MODE: ${TRANSLATOR_DEMO_MODE:-0}
       TRANSLATOR_HOST: 0.0.0.0
       TRANSLATOR_PORT: "8000"
       WANDB_MODE: offline
@@ -21,6 +22,6 @@ services:
           "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()",
         ]
       interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
